@@ -1,0 +1,21 @@
+{
+  "name": "@mm/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@mm/game-core": "workspace:*",
+    "@mm/npc": "workspace:*",
+    "@mm/shared": "workspace:*",
+    "fastify": "^5.12.5"
+  },
+  "devDependencies": {
+    "tsx": "^4.23.15"
+  }
+}
