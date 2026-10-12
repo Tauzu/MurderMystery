@@ -1,8 +1,21 @@
+import { Redis } from 'ioredis';
 import { buildApp } from './app';
+import { createDb } from './db';
 
-const port = Number(process.env.PORT ?? 3001);
-const app = buildApp();
+try {
+  process.loadEnvFile(new URL('../../../.env', import.meta.url));
+} catch {
+  // .env が無い場合は環境変数をそのまま使う
+}
 
-app.listen({ port, host: '0.0.0.0' }).then(() => {
-  console.log(`server listening on :${port}`);
+// .env の読み込み後に評価させるため、動的 import にする
+const { env } = await import('./env');
+
+const app = buildApp({
+  db: createDb(env.databaseUrl),
+  redis: new Redis(env.redisUrl),
+  secureCookies: env.isProduction,
 });
+
+await app.listen({ port: env.port, host: '0.0.0.0' });
+console.log(`server listening on :${env.port}`);

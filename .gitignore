@@ -12,3 +12,4 @@ coverage/
 .idea/
 next-env.d.ts
 *.tsbuildinfo
+apps/server/src/generated/
