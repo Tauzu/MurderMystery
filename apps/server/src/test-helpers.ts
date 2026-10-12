@@ -39,3 +39,11 @@ export function sessionCookie(res: {
   const c = res.cookies.find((x) => x.name === 'mm_session');
   return c ? { mm_session: c.value } : {};
 }
+
+/** パスワード無しのテストユーザーを直接作る（ルーム操作のテスト用）。 */
+export async function createTestUser(db: ReturnType<typeof createDb>) {
+  const user = await db.user.create({
+    data: { email: uniqueEmail(), displayName: 'テスター', agreedAgeAt: new Date() },
+  });
+  return user.id;
+}

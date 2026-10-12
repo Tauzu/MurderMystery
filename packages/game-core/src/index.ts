@@ -3,3 +3,4 @@ export * from './types';
 export * from './create';
 export { reduce, characterOf } from './reduce';
 export * from './view';
+export * from './protocol';

@@ -29,8 +29,9 @@ model User {
   agreedAgeAt  DateTime   @map("agreed_age_at") @db.Timestamptz
   createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
 
-  scenarios Scenario[]
-  played    PlayedScenario[]
+  scenarios      Scenario[]
+  played         PlayedScenario[]
+  participations Participation[]
 
   @@map("users")
 }
@@ -53,6 +54,7 @@ model Scenario {
 
   author     User?            @relation(fields: [authorId], references: [id])
   characters Character[]
+  games      Game[]
   played     PlayedScenario[]
 
   @@index([status, publishedAt])
@@ -68,8 +70,9 @@ model Character {
   situationText String  @map("situation_text")
   isCulprit     Boolean @default(false) @map("is_culprit")
 
-  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
-  cards    Card[]
+  scenario       Scenario        @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  cards          Card[]
+  participations Participation[]
 
   @@unique([scenarioId, slot])
   @@map("characters")
@@ -82,7 +85,8 @@ model Card {
   title       String
   body        String
 
-  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  character Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
+  revealed  RevealedCard[]
 
   @@unique([characterId, slot])
   @@map("cards")
@@ -99,4 +103,111 @@ model PlayedScenario {
 
   @@id([userId, scenarioId])
   @@map("played_scenarios")
+}
+
+enum GameStatus {
+  playing
+  finished
+  aborted
+}
+
+enum ParticipantKind {
+  human
+  npc
+}
+
+enum Outcome {
+  win
+  lose
+  left
+  npc
+}
+
+/// 1プレイ＝1ルーム。ルームIDとして使う
+model Game {
+  id              String     @id @default(uuid()) @db.Uuid
+  scenarioId      String     @map("scenario_id") @db.Uuid
+  scenarioVersion Int        @map("scenario_version")
+  status          GameStatus @default(playing)
+  result          Json?
+  startedAt       DateTime   @default(now()) @map("started_at") @db.Timestamptz
+  finishedAt      DateTime?  @map("finished_at") @db.Timestamptz
+
+  scenario       Scenario        @relation(fields: [scenarioId], references: [id])
+  participations Participation[]
+  chatMessages   ChatMessage[]
+  revealedCards  RevealedCard[]
+  votes          Vote[]
+
+  @@index([status])
+  @@map("games")
+}
+
+/// ゲームの席（4件／ゲーム）
+model Participation {
+  id              String          @id @default(uuid()) @db.Uuid
+  gameId          String          @map("game_id") @db.Uuid
+  seat            Int             @db.SmallInt
+  characterId     String          @map("character_id") @db.Uuid
+  userId          String?         @map("user_id") @db.Uuid
+  initialKind     ParticipantKind @map("initial_kind")
+  switchedToNpcAt DateTime?       @map("switched_to_npc_at") @db.Timestamptz
+  outcome         Outcome?
+
+  game      Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  character Character      @relation(fields: [characterId], references: [id])
+  user      User?          @relation(fields: [userId], references: [id])
+  chat      ChatMessage[]
+  revealed  RevealedCard[]
+  votesCast Vote[]         @relation("voter")
+  votesGot  Vote[]         @relation("target")
+
+  @@unique([gameId, seat])
+  @@index([userId])
+  @@map("participations")
+}
+
+model ChatMessage {
+  id              String   @id @default(uuid()) @db.Uuid
+  gameId          String   @map("game_id") @db.Uuid
+  participationId String   @map("participation_id") @db.Uuid
+  setNo           Int      @map("set_no") @db.SmallInt
+  body            String
+  createdAt       DateTime @map("created_at") @db.Timestamptz
+
+  game          Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+
+  @@index([gameId])
+  @@map("chat_messages")
+}
+
+model RevealedCard {
+  id              String  @id @default(uuid()) @db.Uuid
+  gameId          String  @map("game_id") @db.Uuid
+  participationId String  @map("participation_id") @db.Uuid
+  cardId          String  @map("card_id") @db.Uuid
+  setNo           Int     @map("set_no") @db.SmallInt
+  autoSelected    Boolean @default(false) @map("auto_selected")
+
+  game          Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  participation Participation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  card          Card          @relation(fields: [cardId], references: [id])
+
+  @@unique([gameId, cardId])
+  @@map("revealed_cards")
+}
+
+model Vote {
+  gameId   String  @map("game_id") @db.Uuid
+  voterId  String  @map("voter_participation_id") @db.Uuid
+  /// 棄権はnull
+  targetId String? @map("target_participation_id") @db.Uuid
+
+  game   Game           @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  voter  Participation  @relation("voter", fields: [voterId], references: [id], onDelete: Cascade)
+  target Participation? @relation("target", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@id([gameId, voterId])
+  @@map("votes")
 }
