@@ -83,3 +83,10 @@ pnpm build:web
 - 実装は [計画書](docs/計画書.md) のサイクル（S0〜S7）ごとに進めます。
 - 作業のたびに [進捗](docs/進捗.md) を更新します。
 - ブランチ・コミット・PRのルールは [進捗](docs/進捗.md) の「Git／GitHub運用」を参照してください。
+
+## 画面の動作確認（ブラウザ）
+
+1. `docker compose up -d`、`pnpm db:deploy`、`pnpm db:seed` を済ませ、`pnpm dev:server` と `pnpm dev:web` を起動する。
+2. `http://localhost:3000` を開き、アカウントを登録する。
+3. 4人で遊ぶ場合は、別々のユーザーとしてログインするため、**シークレットウィンドウやブラウザを分けて**4つ開き、それぞれ登録して「4人で遊ぶ」を選ぶ。
+4. 画面は `/api/*` を `API_URL`（既定 `http://localhost:3001`）へ中継する。WebSocket は `NEXT_PUBLIC_WS_URL`（既定 `ws://<ホスト名>:3001/ws`）へ直接つなぐ。サーバーは `WEB_ORIGIN`（既定 `http://localhost:3000`）以外のオリジンからのWebSocket接続を拒否する。

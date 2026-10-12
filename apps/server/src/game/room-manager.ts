@@ -1,4 +1,5 @@
 import {
+  characterOf,
   createRoom,
   reduce,
   type Effect,
@@ -7,6 +8,7 @@ import {
   type RoomEvent,
   type RoomState,
 } from '@mm/game-core';
+import { CONFIG } from '@mm/shared';
 import type { Redis } from 'ioredis';
 import type { Db } from '../db';
 import { loadScenarioData } from './loader';
@@ -135,7 +137,45 @@ export class RoomManager {
   }
 
   async tickAll(): Promise<void> {
-    await Promise.all([...this.rooms.keys()].map((id) => this.dispatch(id, { type: 'Tick' })));
+    await Promise.all([...this.rooms.keys()].map((id) => this.tickRoom(id)));
+  }
+
+  private async tickRoom(id: string): Promise<void> {
+    await this.actForNpcs(id);
+    await this.dispatch(id, { type: 'Tick' });
+  }
+
+  /**
+   * カード公開・投票でNPC席が待たれないよう、少し待ってからランダムに行動させる。
+   * AIによる行動（S3）が入るまでの代替で、AI失敗時のフォールバックにもなる。
+   */
+  private async actForNpcs(id: string): Promise<void> {
+    const state = this.rooms.get(id)?.state;
+    if (!state || state.deadlineAt === null) return;
+    const total =
+      state.phase === 'REVEAL' ? CONFIG.REVEAL_SEC : state.phase === 'VOTE' ? CONFIG.VOTE_SEC : 0;
+    if (total === 0) return;
+    const elapsedMs = this.now() - (state.deadlineAt - total * 1000);
+    if (elapsedMs < CONFIG.NPC_FALLBACK_DELAY_SEC * 1000) return;
+
+    for (const seat of state.seats) {
+      if (seat.kind !== 'npc') continue;
+      if (state.phase === 'REVEAL' && state.picks[seat.index] === undefined) {
+        const open = characterOf(state, seat).cards.filter(
+          (c) => !state.revealed.some((r) => r.cardId === c.id),
+        );
+        const card = open[Math.floor(this.rng() * open.length)];
+        if (card) {
+          await this.dispatch(id, { type: 'PickCard', seat: seat.index, cardId: card.id });
+        }
+      } else if (state.phase === 'VOTE' && state.votes[seat.index] === undefined) {
+        const others = state.seats.filter((x) => x.index !== seat.index);
+        const target = others[Math.floor(this.rng() * others.length)];
+        if (target) {
+          await this.dispatch(id, { type: 'Vote', seat: seat.index, target: target.index });
+        }
+      }
+    }
   }
 
   /** サーバー再起動後に、Redis に残っている進行中のルームを復元する（設計書 §6.5）。 */

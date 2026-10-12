@@ -9,6 +9,7 @@ import { CONFIG } from '@mm/shared';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { RoomUpdate } from '../game/room-manager';
+import { env } from '../env';
 import { SESSION_COOKIE, getSessionUserId } from '../session';
 
 const query = z.object({ roomId: z.string().uuid() });
@@ -35,6 +36,11 @@ export async function wsRoutes(app: FastifyInstance) {
       if (onMessage) onMessage(raw);
       else pending.push(raw);
     });
+
+    // 他のサイトからの接続を拒否する。ブラウザは Origin を付ける（テストなどの非ブラウザは付けない）
+    const origin = request.headers.origin;
+    if (origin && !env.webOrigins.includes(origin))
+      return socket.close(CLOSE_FORBIDDEN, 'forbidden origin');
 
     const q = query.safeParse(request.query);
     const sid = request.cookies[SESSION_COOKIE];
