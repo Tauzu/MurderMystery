@@ -238,3 +238,26 @@ describe('RoomManager：再起動からの復元', () => {
     restarted.shutdown();
   });
 });
+
+describe('RoomManager：NPC席の自動行動', () => {
+  it('人間が全員行動済みなら、少し待つだけでカード公開と投票が進む', async () => {
+    const { roomId } = await startGame(2);
+    for (const seat of [0, 1]) await send(roomId, { type: 'Ready', seat });
+    for (const seat of [0, 1]) await send(roomId, { type: 'Ready', seat });
+    expect(manager.getState(roomId)?.state.phase).toBe('REVEAL');
+
+    for (const seat of [0, 1]) {
+      const { state } = manager.getState(roomId)!;
+      const character = state.scenario.characters.find(
+        (c) => c.id === state.seats[seat]!.characterId,
+      )!;
+      await send(roomId, { type: 'PickCard', seat, cardId: character.cards[0]!.id });
+    }
+    // 直後はまだ待つ。NPC席の行動を待たずにタイムアウトまで放置されないことを確認する
+    await manager.tickAll();
+    expect(manager.getState(roomId)?.state.phase).toBe('REVEAL');
+    advance(CONFIG.NPC_FALLBACK_DELAY_SEC + 1);
+    await manager.tickAll();
+    expect(manager.getState(roomId)?.state.phase).toBe('TALK');
+  });
+});
