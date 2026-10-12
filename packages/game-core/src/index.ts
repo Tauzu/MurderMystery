@@ -1,2 +1,5 @@
-// ルーム状態機械（S2で実装）。副作用を持たない純粋関数のみを置く。設計書 §6。
-export const PACKAGE_NAME = '@mm/game-core';
+// ルーム状態機械。副作用を持たない純粋関数のみを置く。設計書 §6。
+export * from './types';
+export * from './create';
+export { reduce, characterOf } from './reduce';
+export * from './view';

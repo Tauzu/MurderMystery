@@ -12,8 +12,8 @@ describe('shared', () => {
     expect(total - revealed).toBe(SEAT_COUNT);
   });
 
-  it('フェーズは WAITING で始まり CLOSED で終わる', () => {
-    expect(PHASES[0]).toBe('WAITING');
+  it('フェーズは INTRO で始まり CLOSED で終わる', () => {
+    expect(PHASES[0]).toBe('INTRO');
     expect(PHASES[PHASES.length - 1]).toBe('CLOSED');
   });
 });

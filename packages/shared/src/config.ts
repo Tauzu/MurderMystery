@@ -5,6 +5,8 @@ export const CONFIG = {
   REVEAL_SEC: 30,
   TALK_SEC: 600,
   VOTE_SEC: 120,
+  /** 結果表示から、ルームを閉じるまでの時間 */
+  RESULT_CLOSE_SEC: 1800,
   CHAT_MAX_CHARS: 200,
   CHAT_RATE_PER_SEC: 1,
   IDLE_SWITCH_SEC: 180,
