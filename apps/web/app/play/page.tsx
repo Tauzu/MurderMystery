@@ -4,11 +4,12 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ApiError, api, type ScenarioSummary } from '../../lib/api';
+import { Pending } from '../../components/Pending';
 import { useRequireUser } from '../../lib/useUser';
 
 export default function PlayPage() {
   const router = useRouter();
-  const user = useRequireUser();
+  const { user, error: userError } = useRequireUser();
   const [scenarios, setScenarios] = useState<ScenarioSummary[] | null>(null);
   const [size, setSize] = useState(4);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export default function PlayPage() {
     }
   };
 
-  if (!user) return <p className="muted">読み込み中…</p>;
+  if (!user) return <Pending error={userError} />;
 
   return (
     <>

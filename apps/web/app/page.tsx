@@ -3,13 +3,14 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
+import { Pending } from '../components/Pending';
 import { useRequireUser } from '../lib/useUser';
 
 export default function HomePage() {
   const router = useRouter();
-  const user = useRequireUser();
+  const { user, error } = useRequireUser();
 
-  if (!user) return <p className="muted">読み込み中…</p>;
+  if (!user) return <Pending error={error} />;
 
   const logout = async () => {
     await api('/auth/logout', { method: 'POST' });

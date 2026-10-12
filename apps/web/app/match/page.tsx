@@ -3,12 +3,13 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { api, type MatchStatus } from '../../lib/api';
+import { Pending } from '../../components/Pending';
 import { useRequireUser } from '../../lib/useUser';
 
 /** マッチングの待機。数秒おきに状況を確認し、ルームができたら移動する。 */
 export default function MatchPage() {
   const router = useRouter();
-  const user = useRequireUser();
+  const { user, error } = useRequireUser();
   const [status, setStatus] = useState<MatchStatus | null>(null);
 
   useEffect(() => {
@@ -38,7 +39,7 @@ export default function MatchPage() {
     router.replace('/play');
   };
 
-  if (!user || !status) return <p className="muted">読み込み中…</p>;
+  if (!user || !status) return <Pending error={error} />;
 
   return (
     <>
