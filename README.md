@@ -13,6 +13,7 @@
 | [仕様書](docs/仕様書.md) | 機能・ルール・画面の詳細 |
 | [設計書](docs/設計書.md) | 構成、データ、通信、NPC、API |
 | [進捗](docs/進捗.md) | 実装の進捗と作業ログ、Git運用ルール |
+| [NPC評価](docs/NPC評価.md) | NPC（AI）の品質評価の方法と結果 |
 
 ## リポジトリ構成
 
@@ -76,7 +77,7 @@ pnpm build:web
 
 ## 環境変数
 
-`.env.example` を参照してください。`.env` はコミットしません。AI関連（`ANTHROPIC_API_KEY`）はS3以降で使います。
+`.env.example` を参照してください。`.env` はコミットしません。NPCの発言に使う `ANTHROPIC_API_KEY` を設定しないと、NPCは発言せず、カード公開と投票だけランダムに行います（テストとCIはAIをモックにするため、キーは不要です）。
 
 ## 開発の進め方
 
@@ -90,3 +91,15 @@ pnpm build:web
 2. `http://localhost:3000` を開き、アカウントを登録する。
 3. 4人で遊ぶ場合は、別々のユーザーとしてログインするため、**シークレットウィンドウやブラウザを分けて**4つ開き、それぞれ登録して「4人で遊ぶ」を選ぶ。
 4. 画面は `/api/*` を `API_URL`（既定 `http://localhost:3001`）へ中継する。WebSocket は `NEXT_PUBLIC_WS_URL`（既定 `ws://<ホスト名>:3001/ws`）へ直接つなぐ。サーバーは `WEB_ORIGIN`（既定 `http://localhost:3000`）以外のオリジンからのWebSocket接続を拒否する。
+
+## NPCの品質評価
+
+`ANTHROPIC_API_KEY` を `.env` に設定したうえで、全席をNPCにして1ゲームを自動で進めます（費用が発生します）。
+
+```bash
+pnpm --filter @mm/server eval:npc                 # 既定のシナリオ・モデル
+pnpm --filter @mm/server eval:npc --rounds=3      # 各セットの発言を3巡にする
+pnpm --filter @mm/server eval:npc --raw           # モデルの生の返答も表示する
+```
+
+結果の読み方は [docs/NPC評価.md](docs/NPC評価.md) を参照してください。

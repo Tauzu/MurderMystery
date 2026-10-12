@@ -12,6 +12,7 @@ import { CONFIG } from '@mm/shared';
 import type { Redis } from 'ioredis';
 import type { Db } from '../db';
 import { loadScenarioData } from './loader';
+import type { NpcEngine } from './npc-engine';
 import { createGameRecords, finishGame, markPlayed } from './persist';
 
 export interface RoomUpdate {
@@ -42,6 +43,8 @@ export interface RoomManagerOptions {
   rng?: () => number;
   /** 1秒ごとに全ルームへ Tick を送る。本番で有効にし、テストでは手動で tick() を呼ぶ */
   autoTick?: boolean;
+  /** NPC席の行動を決めるエンジン。無ければ、カード公開と投票はランダムに行う */
+  npc?: NpcEngine;
 }
 
 const SNAPSHOT_TTL_SEC = 60 * 60 * 2;
@@ -141,7 +144,12 @@ export class RoomManager {
   }
 
   private async tickRoom(id: string): Promise<void> {
-    await this.actForNpcs(id);
+    const state = this.rooms.get(id)?.state;
+    if (state && this.opts.npc) {
+      this.opts.npc.step(id, state, (event) => this.dispatch(id, event));
+    } else {
+      await this.actForNpcs(id);
+    }
     await this.dispatch(id, { type: 'Tick' });
   }
 

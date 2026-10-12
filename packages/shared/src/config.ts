@@ -17,6 +17,17 @@ export const CONFIG = {
   NPC_MAX_CHARS: 100,
   /** カード公開・投票でNPC席が自動で行動するまでの待ち（AI未使用時の代替。S3でAIの行動に置き換わる） */
   NPC_FALLBACK_DELAY_SEC: 3,
+  /** NPCに使うモデル。品質評価の結果次第で変える（設計書 §8.6） */
+  NPC_MODEL: 'claude-haiku-5-5',
+  NPC_MAX_OUTPUT_TOKENS: 300,
+  /** プロンプトに含める直近の会話件数 */
+  NPC_HISTORY_COUNT: 30,
+  /** AI呼び出しのタイムアウト */
+  NPC_AI_TIMEOUT_SEC: 15,
+  /** 1ゲームで使えるAIの総トークン（入力＋出力）。80%で発言間隔を延ばし、100%で定型文のみ【仮】 */
+  NPC_BUDGET_TOKENS: 300_000,
+  /** 直近にこの秒数以内の発言があれば、NPCの発言をずらす */
+  NPC_TALK_COLLISION_SEC: 5,
   CHATLOG_RETENTION_DAYS: 90,
 } as const;
 
