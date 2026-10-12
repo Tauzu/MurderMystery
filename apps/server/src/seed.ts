@@ -32,28 +32,37 @@ export async function seedScenarios(db: Db, dir: string): Promise<SeedResult> {
       result.skipped.push(slug);
       continue;
     }
-    await db.scenario.create({
-      data: {
-        slug,
-        title: s.title,
-        summary: s.summary,
-        introText: s.introText,
-        endingText: s.endingText,
-        status: 'published',
-        publishedAt: new Date(),
-        characters: {
-          create: s.characters.map((c, slot) => ({
-            slot,
-            name: c.name,
-            publicProfile: c.publicProfile,
-            situationText: c.situationText,
-            isCulprit: c.isCulprit,
-            cards: { create: c.cards.map((card, cardSlot) => ({ slot: cardSlot, ...card })) },
-          })),
+    try {
+      await db.scenario.create({
+        data: {
+          slug,
+          title: s.title,
+          summary: s.summary,
+          introText: s.introText,
+          endingText: s.endingText,
+          status: 'published',
+          publishedAt: new Date(),
+          characters: {
+            create: s.characters.map((c, slot) => ({
+              slot,
+              name: c.name,
+              publicProfile: c.publicProfile,
+              situationText: c.situationText,
+              isCulprit: c.isCulprit,
+              cards: { create: c.cards.map((card, cardSlot) => ({ slot: cardSlot, ...card })) },
+            })),
+          },
         },
-      },
-    });
-    result.created.push(slug);
+      });
+      result.created.push(slug);
+    } catch (e) {
+      // 別のプロセスが同時に登録した場合（slug の重複）は、登録済みとして扱う
+      if ((e as { code?: string }).code === 'P2002') {
+        result.skipped.push(slug);
+        continue;
+      }
+      throw e;
+    }
   }
   return result;
 }

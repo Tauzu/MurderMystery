@@ -10,6 +10,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mm/shared": "workspace:*"
+    "@mm/shared": "workspace:*",
+    "zod": "^4.6.5"
   }
 }

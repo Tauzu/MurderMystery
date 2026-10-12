@@ -15,7 +15,11 @@ const app = buildApp({
   db: createDb(env.databaseUrl),
   redis: new Redis(env.redisUrl),
   secureCookies: env.isProduction,
+  autoTick: true,
 });
+
+const restored = await app.deps.rooms.restoreAll();
+if (restored > 0) console.log(`ルームを ${restored} 件復元しました`);
 
 await app.listen({ port: env.port, host: '0.0.0.0' });
 console.log(`server listening on :${env.port}`);
