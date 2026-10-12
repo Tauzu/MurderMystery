@@ -245,6 +245,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@mm/game-core':
+        specifier: workspace:*
+        version: link:../../packages/game-core
       '@mm/shared':
         specifier: workspace:*
         version: link:../../packages/shared

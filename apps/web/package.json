@@ -11,6 +11,7 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@mm/game-core": "workspace:*",
     "@mm/shared": "workspace:*",
     "next": "^16.4.0",
     "react": "^19.3.0",

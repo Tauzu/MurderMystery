@@ -31,9 +31,12 @@ class Client {
     this.closed = new Promise((resolve) => ws.on('close', (code: number) => resolve(code)));
   }
 
-  static async connect(roomId: string, cookie?: string) {
+  static async connect(roomId: string, cookie?: string, origin?: string) {
     const ws = new WebSocket(`ws://127.0.0.1:${port}/ws?roomId=${roomId}`, {
-      headers: cookie ? { Cookie: `mm_session=${cookie}` } : {},
+      headers: {
+        ...(cookie ? { Cookie: `mm_session=${cookie}` } : {}),
+        ...(origin ? { Origin: origin } : {}),
+      },
     });
     const client = new Client(ws);
     await new Promise<void>((resolve) => {
@@ -213,6 +216,16 @@ describe('WebSocket：接続', () => {
       players[0]!.cookie,
     );
     expect(await missing.closed).toBe(4404);
+  });
+
+  it('許可されていないオリジンからの接続は拒否される', async () => {
+    const { roomId, players } = await startFourPlayerGame();
+    const evil = await Client.connect(roomId, players[0]!.cookie, 'http://evil.example');
+    expect(await evil.closed).toBe(4403);
+
+    const ok = await Client.connect(roomId, players[0]!.cookie, 'http://localhost:3000');
+    await ok.waitFor((m) => m.type === 'snapshot');
+    ok.close();
   });
 
   it('接続すると自分用の snapshot が届き、不正なメッセージにはエラーが返る', async () => {
