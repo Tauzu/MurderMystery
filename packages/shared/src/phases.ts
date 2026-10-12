@@ -1,5 +1,9 @@
-/** 設計書 §6.1。ルームの状態（フェーズ）の並び。 */
-export const PHASES = ['WAITING', 'INTRO', 'CONFIRM', 'SET', 'VOTE', 'RESULT', 'CLOSED'] as const;
+/**
+ * ルームの状態（フェーズ）の並び。設計書 §6.1。
+ * マッチングはルーム作成の前に行うため、ルームは INTRO から始まる。
+ * 各セットは REVEAL → TALK の2状態で表し、セット番号は別に持つ。
+ */
+export const PHASES = ['INTRO', 'CONFIRM', 'REVEAL', 'TALK', 'VOTE', 'RESULT', 'CLOSED'] as const;
 export type Phase = (typeof PHASES)[number];
 
 /** 1ゲームのセット数（仕様書 §4.2）。 */
