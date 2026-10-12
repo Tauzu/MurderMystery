@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserStatus {
+  active
+  suspended
+}
+
+enum ScenarioStatus {
+  draft
+  published
+  hidden_by_author
+  hidden_by_report
+  hidden_by_admin
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  email        String     @unique
+  passwordHash String?    @map("password_hash")
+  displayName  String     @map("display_name")
+  status       UserStatus @default(active)
+  agreedAgeAt  DateTime   @map("agreed_age_at") @db.Timestamptz
+  createdAt    DateTime   @default(now()) @map("created_at") @db.Timestamptz
+
+  scenarios Scenario[]
+  played    PlayedScenario[]
+
+  @@map("users")
+}
+
+model Scenario {
+  id             String         @id @default(uuid()) @db.Uuid
+  /// 運営制作シナリオの識別子（seedの冪等性に使う）。投稿シナリオはnull
+  slug           String?        @unique
+  authorId       String?        @map("author_id") @db.Uuid
+  title          String
+  summary        String
+  introText      String         @map("intro_text")
+  endingText     String         @map("ending_text")
+  status         ScenarioStatus @default(draft)
+  checkResult    Json?          @map("check_result")
+  contentVersion Int            @default(1) @map("content_version")
+  publishedAt    DateTime?      @map("published_at") @db.Timestamptz
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz
+  updatedAt      DateTime       @updatedAt @map("updated_at") @db.Timestamptz
+
+  author     User?            @relation(fields: [authorId], references: [id])
+  characters Character[]
+  played     PlayedScenario[]
+
+  @@index([status, publishedAt])
+  @@map("scenarios")
+}
+
+model Character {
+  id            String  @id @default(uuid()) @db.Uuid
+  scenarioId    String  @map("scenario_id") @db.Uuid
+  slot          Int     @db.SmallInt
+  name          String
+  publicProfile String  @map("public_profile")
+  situationText String  @map("situation_text")
+  isCulprit     Boolean @default(false) @map("is_culprit")
+
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+  cards    Card[]
+
+  @@unique([scenarioId, slot])
+  @@map("characters")
+}
+
+model Card {
+  id          String @id @default(uuid()) @db.Uuid
+  characterId String @map("character_id") @db.Uuid
+  slot        Int    @db.SmallInt
+  title       String
+  body        String
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@unique([characterId, slot])
+  @@map("cards")
+}
+
+/// プレイ済み管理（仕様書 §7.3）。ゲームの確認フェーズに入った時点で記録する
+model PlayedScenario {
+  userId        String   @map("user_id") @db.Uuid
+  scenarioId    String   @map("scenario_id") @db.Uuid
+  firstPlayedAt DateTime @default(now()) @map("first_played_at") @db.Timestamptz
+
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scenario Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+
+  @@id([userId, scenarioId])
+  @@map("played_scenarios")
+}

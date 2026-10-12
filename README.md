@@ -19,9 +19,10 @@
 ```
 apps/web          Next.js（画面）
 apps/server       Fastify（REST・WebSocket）
-packages/shared   共有の型・定数・設定値
+packages/shared   共有の型・定数・設定値・シナリオ入力のスキーマ
 packages/game-core  ルーム状態機械（純粋関数）
 packages/npc      NPCのプロンプト・行動決定
+scenarios/        運営制作シナリオ（JSON）
 docs/             ドキュメント
 ```
 
@@ -33,7 +34,7 @@ docs/             ドキュメント
 |---|---|---|
 | Node.js | 24（`.node-version` 参照。22以上で動作想定） | |
 | pnpm | `package.json` の `packageManager` に記載のバージョン | `corepack enable` で自動的に使われる |
-| Docker | 最新版 | PostgreSQL・Redis の起動に使用（S1以降で必要） |
+| Docker | 最新版 | PostgreSQL・Redis の起動に使用。サーバーのテストも実DB・実Redisに接続するため必要 |
 | Git | | |
 
 ### 手順
@@ -46,7 +47,10 @@ corepack enable          # pnpm を有効化（未導入の場合）
 pnpm install             # 依存関係をインストール
 
 cp .env.example .env     # 環境変数を用意。必要に応じて値を編集
-docker compose up -d     # PostgreSQL と Redis を起動（S1以降）
+docker compose up -d     # PostgreSQL と Redis を起動
+
+pnpm db:deploy           # マイグレーションを適用
+pnpm db:seed             # 運営制作シナリオ（scenarios/*.json）を登録
 ```
 
 > `pnpm install` で `esbuild` のビルドスクリプトが許可されます（`pnpm-workspace.yaml` の `allowBuilds`）。

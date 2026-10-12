@@ -13,7 +13,10 @@
     "format:check": "prettier --check .",
     "dev:server": "pnpm --filter @mm/server dev",
     "dev:web": "pnpm --filter @mm/web dev",
-    "build:web": "pnpm --filter @mm/web build"
+    "build:web": "pnpm --filter @mm/web build",
+    "db:deploy": "pnpm --filter @mm/server db:deploy",
+    "db:seed": "pnpm --filter @mm/server db:seed",
+    "db:migrate": "pnpm --filter @mm/server db:migrate"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
