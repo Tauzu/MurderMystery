@@ -11,11 +11,23 @@ export interface SeedResult {
   skipped: string[];
 }
 
+export interface SeedOptions {
+  /**
+   * 登録済みの運営シナリオを、そのシナリオの対戦記録ごと削除して作り直す。
+   * 公開前の開発環境で、シナリオの本文を直したときだけ使う（本番では使わない）。
+   */
+  replace?: boolean;
+}
+
 /**
  * 運営制作シナリオ（scenarios/*.json）を登録する。
  * 公開済みシナリオの本文は変更できない（仕様書 §6.2）ため、登録済みの slug は何もしない。
  */
-export async function seedScenarios(db: Db, dir: string): Promise<SeedResult> {
+export async function seedScenarios(
+  db: Db,
+  dir: string,
+  options: SeedOptions = {},
+): Promise<SeedResult> {
   const result: SeedResult = { created: [], skipped: [] };
   const files = (await readdir(dir)).filter((f) => f.endsWith('.json')).sort();
 
@@ -28,7 +40,12 @@ export async function seedScenarios(db: Db, dir: string): Promise<SeedResult> {
     }
     const s = parsed.data;
 
-    if (await db.scenario.findUnique({ where: { slug } })) {
+    const existing = await db.scenario.findUnique({ where: { slug } });
+    if (existing && options.replace) {
+      // 対戦記録（Game）はシナリオ削除では消えないため、先に削除する
+      await db.game.deleteMany({ where: { scenarioId: existing.id } });
+      await db.scenario.delete({ where: { id: existing.id } });
+    } else if (existing) {
       result.skipped.push(slug);
       continue;
     }

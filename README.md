@@ -103,3 +103,15 @@ pnpm --filter @mm/server eval:npc --raw           # モデルの生の返答も�
 ```
 
 結果の読み方は [docs/NPC評価.md](docs/NPC評価.md) を参照してください。
+
+シナリオの勝敗バランス（探偵側の勝率）は、全席NPCの対戦を複数回行って測ります。
+
+```bash
+pnpm --filter @mm/server eval:balance --games=6
+```
+
+開発環境のDBに登録済みの運営シナリオを直したときは、次のコマンドで作り直します（そのシナリオの対戦記録も削除されます。本番では実行できません）。
+
+```bash
+pnpm --filter @mm/server db:reseed
+```
