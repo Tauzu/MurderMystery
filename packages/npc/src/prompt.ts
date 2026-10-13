@@ -6,7 +6,7 @@ import { CONFIG } from '@mm/shared';
  * 他キャラの状況文や未公開の手札は、そもそもこの経路に存在しない（設計書 §8.3）。
  */
 
-export function systemPrompt(isCulprit: boolean): string {
+export function systemPrompt(isCulprit: boolean, persona?: string): string {
   const common = [
     'あなたはマーダーミステリーというゲームの参加者の1人として、割り当てられたキャラクターを演じます。',
     '- 発言はキャラクターの口調で、会話として自然な短い文にする。',
@@ -27,7 +27,7 @@ export function systemPrompt(isCulprit: boolean): string {
         '自分の秘密は、聞かれるまで自分から言わなくて構いません。',
         '犯人を見つけるために、他の人の話の矛盾や不自然な点を探してください。',
       ];
-  return [...common, ...role].join('\n');
+  return [...common, ...role, ...(persona ? [`あなたの性格：${persona}`] : [])].join('\n');
 }
 
 function characterBlock(view: RoomView): string {

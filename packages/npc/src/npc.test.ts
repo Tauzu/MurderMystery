@@ -78,6 +78,11 @@ describe('プロンプト：知り得る情報だけを含む', () => {
     expect(systemPrompt(false)).toContain('嘘をつかず');
   });
 
+  it('性格を指定すると、システムプロンプトに入る。指定しなければ入らない', () => {
+    expect(systemPrompt(false, '慎重な性格')).toContain('あなたの性格：慎重な性格');
+    expect(systemPrompt(false)).not.toContain('あなたの性格');
+  });
+
   it('公開済みカードは本文ごと入る', () => {
     const state = orderedRoom();
     state.revealed.push({ setNo: 1, seat: 0, cardId: 'card-A1', auto: false });

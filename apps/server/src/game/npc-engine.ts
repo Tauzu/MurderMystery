@@ -2,6 +2,7 @@ import { projectView, type RoomError, type RoomEvent, type RoomState } from '@mm
 import {
   Budget,
   decidePick,
+  pickPersona,
   decideTalk,
   decideVote,
   nextTalkDelayMs,
@@ -17,6 +18,8 @@ interface RoomNpc {
   nextTalk: Map<number, { setNo: number; at: number }>;
   /** AI呼び出し中の行動。同じ行動を二重に始めないための印 */
   inFlight: Set<string>;
+  /** 席 → 性格（席ごとに最初に決めたものを使い続ける） */
+  personas: Map<number, string>;
 }
 
 export interface NpcEngineOptions {
@@ -54,12 +57,18 @@ export class NpcEngine {
     for (const seat of npcSeats) {
       if (state.phase === 'REVEAL' && state.picks[seat.index] === undefined) {
         this.once(room, `pick:${state.setNo}:${seat.index}`, async () => {
-          const d = await decidePick(this.deps(room), projectView(state, seat.index, this.now()));
+          const d = await decidePick(
+            this.deps(room, seat.index),
+            projectView(state, seat.index, this.now()),
+          );
           await dispatch({ type: 'PickCard', seat: seat.index, cardId: d.cardId });
         });
       } else if (state.phase === 'VOTE' && state.votes[seat.index] === undefined) {
         this.once(room, `vote:${seat.index}`, async () => {
-          const d = await decideVote(this.deps(room), projectView(state, seat.index, this.now()));
+          const d = await decideVote(
+            this.deps(room, seat.index),
+            projectView(state, seat.index, this.now()),
+          );
           await dispatch({ type: 'Vote', seat: seat.index, target: d.target });
         });
       } else if (state.phase === 'TALK') {
@@ -91,7 +100,7 @@ export class NpcEngine {
 
     this.once(room, `talk:${seat}`, async () => {
       // 古い状態で発言しないよう、呼び出す直前の状態を使う
-      const d = await decideTalk(this.deps(room), view());
+      const d = await decideTalk(this.deps(room, seat), view());
       const after = this.now();
       room.nextTalk.set(seat, { setNo: state.setNo, at: after + this.delay(room, view()) });
       if (d) await dispatch({ type: 'Chat', seat, body: d.say });
@@ -102,13 +111,23 @@ export class NpcEngine {
     return nextTalkDelayMs({ view, rng: this.rng, budgetSlow: room.budget.slow });
   }
 
-  private deps(room: RoomNpc) {
+  private deps(room: RoomNpc, seat: number) {
     return {
       llm: this.opts.llm,
       budget: room.budget,
+      persona: this.personaOf(room, seat),
       rng: this.rng,
       onError: (label: string, e: unknown) => this.opts.log?.(`NPC(${label})のAI呼び出しに失敗`, e),
     };
+  }
+
+  private personaOf(room: RoomNpc, seat: number): string {
+    let persona = room.personas.get(seat);
+    if (persona === undefined) {
+      persona = pickPersona(this.rng).text;
+      room.personas.set(seat, persona);
+    }
+    return persona;
   }
 
   private roomOf(roomId: string): RoomNpc {
@@ -118,6 +137,7 @@ export class NpcEngine {
         budget: new Budget(CONFIG.NPC_BUDGET_TOKENS),
         nextTalk: new Map(),
         inFlight: new Set(),
+        personas: new Map(),
       };
       this.rooms.set(roomId, room);
     }

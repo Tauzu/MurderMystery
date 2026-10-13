@@ -9,6 +9,8 @@ export interface NpcDeps {
   budget: Budget;
   rng: () => number;
   model?: string;
+  /** その席の性格（プロンプトに加える）。省略可 */
+  persona?: string;
   /** 失敗の記録など。省略可 */
   onError?: (label: string, error: unknown) => void;
 }
@@ -56,7 +58,7 @@ export function copiesSecret(say: string, secret: string, minLen = 20): boolean 
 async function call(deps: NpcDeps, view: RoomView, user: string) {
   const res = await deps.llm.complete({
     model: deps.model ?? CONFIG.NPC_MODEL,
-    system: systemPrompt(view.me.isCulprit),
+    system: systemPrompt(view.me.isCulprit, deps.persona),
     user,
     maxTokens: CONFIG.NPC_MAX_OUTPUT_TOKENS,
     timeoutMs: CONFIG.NPC_AI_TIMEOUT_SEC * 1000,

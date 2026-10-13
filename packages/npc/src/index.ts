@@ -2,5 +2,6 @@
 export * from './budget';
 export * from './decide';
 export * from './llm';
+export * from './persona';
 export * from './prompt';
 export * from './schedule';

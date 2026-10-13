@@ -1,6 +1,6 @@
 /**
  * シナリオの勝敗バランスの測定。全席をNPCにした対戦を複数回行い、探偵側の勝率を出す。
- * 使い方: pnpm --filter @mm/server eval:balance [シナリオJSON] [--games=6] [--rounds=2] [--model=...]
+ * 使い方: pnpm --filter @mm/server eval:balance [シナリオJSON] [--games=6] [--rounds=2] [--parallel=2] [--no-persona] [--model=...]
  * 犯人が不利すぎないか（探偵側の勝率が高すぎないか）を、シナリオを直す前後で比べるために使う。
  * ANTHROPIC_API_KEY が必要（費用が発生する。1ゲームあたり約13万トークン）。
  */
@@ -12,6 +12,8 @@ import {
   decidePick,
   decideTalk,
   decideVote,
+  pickPersona,
+  type LlmClient,
   type NpcDeps,
 } from '@mm/npc';
 import { CONFIG, scenarioContentSchema } from '@mm/shared';
@@ -37,7 +39,21 @@ const model = flag('model', CONFIG.NPC_MODEL);
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 if (!apiKey) throw new Error('ANTHROPIC_API_KEY が設定されていません');
-const llm = createAnthropicClient(apiKey);
+const raw = createAnthropicClient(apiKey);
+/** レート制限（429）のときは待って再試行する。測定の結果がAIの失敗で歪まないようにするため */
+const llm: LlmClient = {
+  async complete(req) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await raw.complete(req);
+      } catch (e) {
+        const rateLimited = e instanceof Error && e.message.startsWith('429');
+        if (!rateLimited || attempt >= 8) throw e;
+        await new Promise((r) => setTimeout(r, 3000 + Math.random() * 5000));
+      }
+    }
+  },
+};
 
 const content = scenarioContentSchema.parse(JSON.parse(readFileSync(file, 'utf8')));
 const scenario = {
@@ -53,6 +69,12 @@ const scenario = {
   })),
 };
 
+/** 席ごとの性格。--no-persona のときは付けない */
+const state0Personas = () =>
+  Array.from({ length: 4 }, () =>
+    args.includes('--no-persona') ? undefined : pickPersona(Math.random).text,
+  );
+
 interface Outcome {
   winner: 'detectives' | 'culprit';
   culprit: string;
@@ -64,7 +86,16 @@ interface Outcome {
 
 async function playGame(): Promise<Outcome> {
   const budget = new Budget(Number.MAX_SAFE_INTEGER);
-  const deps: NpcDeps = { llm, budget, rng: Math.random, model };
+  const personas = state0Personas();
+  const depsOf = (seat: number): NpcDeps => ({
+    llm,
+    budget,
+    rng: Math.random,
+    model,
+    persona: personas[seat],
+    onError: (label, e) =>
+      console.warn(`  ! ${label} 失敗:`, e instanceof Error ? e.message.slice(0, 160) : e),
+  });
   let now = 1_800_000_000_000;
   let state: RoomState = createRoom(
     {
@@ -89,13 +120,13 @@ async function playGame(): Promise<Outcome> {
   for (let i = 0; i < 2; i++) for (const s of state.seats) send({ type: 'Ready', seat: s.index });
   for (let set = 1; set <= 3; set++) {
     for (const s of state.seats) {
-      const d = await decidePick(deps, view(s.index));
+      const d = await decidePick(depsOf(s.index), view(s.index));
       send({ type: 'PickCard', seat: s.index, cardId: d.cardId });
     }
     send({ type: 'Tick' });
     for (let round = 0; round < rounds; round++) {
       for (const s of state.seats) {
-        const d = await decideTalk(deps, view(s.index));
+        const d = await decideTalk(depsOf(s.index), view(s.index));
         if (!d) continue;
         now += 5_000;
         send({ type: 'Chat', seat: s.index, body: d.say });
@@ -110,10 +141,12 @@ async function playGame(): Promise<Outcome> {
   )!.index;
   const misses: string[] = [];
   for (const s of state.seats) {
-    const d = await decideVote(deps, view(s.index));
+    const d = await decideVote(depsOf(s.index), view(s.index));
     send({ type: 'Vote', seat: s.index, target: d.target });
     if (s.index !== culpritSeat && d.target !== culpritSeat) {
-      misses.push(`${nameOf(s.index)}→${nameOf(d.target)}：${d.reason ?? '（理由なし）'}`);
+      misses.push(
+        `${nameOf(s.index)}→${nameOf(d.target)}[${d.source}]：${d.reason ?? '（理由なし）'}`,
+      );
     }
   }
   send({ type: 'Tick' });
@@ -130,13 +163,21 @@ async function playGame(): Promise<Outcome> {
 console.log(
   `# 勝敗バランス  model=${model}  games=${games}  rounds=${rounds}\nシナリオ: ${file}\n`,
 );
-const outcomes = await Promise.all(
-  Array.from({ length: games }, () =>
-    playGame().catch((e: unknown) => {
-      console.warn('  ! ゲームが失敗:', e instanceof Error ? e.message : e);
-      return null;
-    }),
-  ),
+// 同時に進めるゲーム数。多いとAPIのレート制限に当たる
+const parallel = Number(flag('parallel', '2'));
+const outcomes: (Outcome | null)[] = new Array(games).fill(null);
+let next = 0;
+await Promise.all(
+  Array.from({ length: parallel }, async () => {
+    while (next < games) {
+      const i = next++;
+      try {
+        outcomes[i] = await playGame();
+      } catch (e) {
+        console.warn('  ! ゲームが失敗:', e instanceof Error ? e.message : e);
+      }
+    }
+  }),
 );
 const done = outcomes.filter((o): o is Outcome => o !== null);
 done.forEach((o, i) => {
