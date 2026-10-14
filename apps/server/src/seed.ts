@@ -57,6 +57,8 @@ export async function seedScenarios(
           summary: s.summary,
           introText: s.introText,
           endingText: s.endingText,
+          victimName: s.victimName,
+          victimProfile: s.victimProfile,
           status: 'published',
           publishedAt: new Date(),
           characters: {

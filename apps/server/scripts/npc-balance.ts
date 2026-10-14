@@ -59,6 +59,9 @@ const content = scenarioContentSchema.parse(JSON.parse(readFileSync(file, 'utf8'
 const scenario = {
   introText: content.introText,
   endingText: content.endingText,
+  victim: content.victimName
+    ? { name: content.victimName, profile: content.victimProfile ?? '' }
+    : null,
   characters: content.characters.map((c, i) => ({
     id: `c${i}`,
     name: c.name,

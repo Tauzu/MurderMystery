@@ -4,6 +4,8 @@ import type { Phase } from '@mm/shared';
 export interface ScenarioData {
   introText: string;
   endingText: string;
+  /** 被害者（任意）。登場人物欄とNPCのプロンプトに出す */
+  victim: { name: string; profile: string } | null;
   characters: CharacterData[];
 }
 

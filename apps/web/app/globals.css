@@ -274,3 +274,8 @@ ul.plain li:last-child {
 .card.latest {
   border-color: var(--accent);
 }
+
+.badge.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}

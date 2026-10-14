@@ -90,6 +90,16 @@ describe('projectView（秘匿の保証）', () => {
     }
   });
 
+  it('被害者は全員に見える', () => {
+    const s = newRoom();
+    for (const seat of SEATS) {
+      expect(projectView(s, seat, T0).victim).toEqual({
+        name: 'VICTIM-NAME',
+        profile: 'VICTIM-PROFILE',
+      });
+    }
+  });
+
   it('自分のキャラの情報は見られる', () => {
     const s = newRoom();
     for (const seat of SEATS) {

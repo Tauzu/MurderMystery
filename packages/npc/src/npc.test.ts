@@ -97,6 +97,10 @@ describe('プロンプト：知り得る情報だけを含む', () => {
     expect(text).not.toContain('CからDへ');
   });
 
+  it('被害者の名前がプロンプトに入る', () => {
+    expect(talkPrompt(viewOf(0))).toContain('VICTIM-NAME');
+  });
+
   it('公開済みカードは本文ごと入る', () => {
     const state = orderedRoom();
     state.revealed.push({ setNo: 1, seat: 0, cardId: 'card-A1', auto: false });

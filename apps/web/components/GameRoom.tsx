@@ -106,11 +106,7 @@ function Banners({ socket }: { socket: GameSocket }) {
 function IntroPanel({ view }: { view: RoomView }) {
   if (view.phase === 'INTRO') return null; // 導入では本文を主画面に出している
   return (
-    <details
-      className="panel fold"
-      key={view.phase === 'CONFIRM' ? 'open' : 'closed'}
-      open={view.phase === 'CONFIRM'}
-    >
+    <details className="panel fold">
       <summary>事件の発端（冒頭文）</summary>
       <p className="prose">{view.introText}</p>
     </details>
@@ -128,6 +124,19 @@ function MyPanel({ view }: { view: RoomView }) {
           <strong>あなたが犯人です。</strong>正体を隠し通してください。
         </p>
       )}
+      {view.phase === 'INTRO' ? (
+        // 冒頭文を読み終えるまでは、状況文も手札も出さない（情報が多すぎるため）
+        <p className="muted">冒頭文を読み終えると、あなたの状況と手札が表示されます。</p>
+      ) : (
+        <MyDetails view={view} />
+      )}
+    </div>
+  );
+}
+
+function MyDetails({ view }: { view: RoomView }) {
+  return (
+    <>
       <details
         className="fold"
         key={view.phase === 'CONFIRM' ? 'open' : 'closed'}
@@ -148,7 +157,7 @@ function MyPanel({ view }: { view: RoomView }) {
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -168,6 +177,13 @@ function SeatsPanel({ view }: { view: RoomView }) {
     <div className="panel">
       <h2>登場人物</h2>
       <ul className="plain">
+        {view.victim && (
+          <li>
+            <strong>{view.victim.name}</strong>
+            <span className="badge danger">被害者</span>
+            <div className="muted">{view.victim.profile}</div>
+          </li>
+        )}
         {view.seats.map((s) => (
           <li key={s.seat}>
             <strong>{s.name}</strong>

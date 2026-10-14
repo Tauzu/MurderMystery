@@ -37,6 +37,7 @@ export interface RoomView {
   deadlineAt: number | null;
   serverNow: number;
   introText: string;
+  victim: { name: string; profile: string } | null;
   seats: SeatView[];
   me: {
     seat: number;
@@ -92,6 +93,7 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
     deadlineAt: state.deadlineAt,
     serverNow: now,
     introText: state.scenario.introText,
+    victim: state.scenario.victim,
     seats: state.seats.map((s) => {
       const c = characterOf(state, s);
       return {

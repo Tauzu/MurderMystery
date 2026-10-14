@@ -31,6 +31,10 @@ export function systemPrompt(isCulprit: boolean, persona?: string): string {
   return [...common, ...role, ...(persona ? [`あなたの性格：${persona}`] : [])].join('\n');
 }
 
+function victimBlock(view: RoomView): string {
+  return view.victim ? `■ 被害者\n${view.victim.name}：${view.victim.profile}` : '';
+}
+
 function characterBlock(view: RoomView): string {
   const me = view.seats[view.me.seat]!;
   const lines = [
@@ -93,11 +97,14 @@ function chatBlock(view: RoomView): string {
 function context(view: RoomView): string {
   return [
     `■ 導入\n${view.introText}`,
+    victimBlock(view),
     characterBlock(view),
     othersBlock(view),
     revealedBlock(view),
     chatBlock(view),
-  ].join('\n\n');
+  ]
+    .filter((block) => block !== '')
+    .join('\n\n');
 }
 
 export function talkPrompt(view: RoomView, avoidRepeat = false): string {
