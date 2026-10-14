@@ -39,6 +39,14 @@ export default function MatchPage() {
     router.replace('/play');
   };
 
+  const startNow = async () => {
+    try {
+      await api('/matches/current/start', { method: 'POST' });
+    } catch {
+      // すでに始まっているときなどは、次の状況確認で画面が切り替わる
+    }
+  };
+
   if (!user || !status) return <Pending error={error} />;
 
   return (
@@ -51,11 +59,15 @@ export default function MatchPage() {
               参加者を待っています…（{status.waiting} / {status.size} 人）
             </p>
             <p className="muted">
-              人数が集まると、自動でゲームが始まります。このページを開いたままお待ちください。
+              人数が集まると、自動でゲームが始まります。あと {status.remainingSec}{' '}
+              秒たつと、足りない席を NPC で補って始めます。このページを開いたままお待ちください。
             </p>
-            <button className="secondary" onClick={cancel}>
-              キャンセル
-            </button>
+            <div className="row">
+              <button onClick={startNow}>今すぐ NPC で開始</button>
+              <button className="secondary" onClick={cancel}>
+                キャンセル
+              </button>
+            </div>
           </>
         ) : (
           <p>ゲームの準備をしています…</p>

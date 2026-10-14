@@ -60,8 +60,13 @@ export function buildApp(opts: AppOptions) {
     redis: opts.redis,
     secureCookies: opts.secureCookies,
     rooms,
-    matchmaker: new Matchmaker(opts.db, rooms),
+    matchmaker: new Matchmaker(opts.db, rooms, { now: opts.now }),
   };
+  if (opts.autoTick) {
+    const timer = setInterval(() => void deps.matchmaker.tick(), 1000);
+    timer.unref();
+    app.addHook('onClose', async () => clearInterval(timer));
+  }
 
   app.register(cookie);
   app.register(websocket);
