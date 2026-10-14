@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { Budget } from './budget';
 import {
   copiesSecret,
+  similarity,
   decidePick,
   decideTalk,
   decideVote,
@@ -143,6 +144,29 @@ describe('decideTalk', () => {
     expect(r?.say).toBe('別の話です。');
   });
 
+  it('自分の直近の発言とほぼ同じ内容は破棄して再生成する', async () => {
+    const view = viewOf(0, [
+      { seat: 0, body: '昨夜は書斎の近くで物音を聞いたのですが、あなたはどこにいましたか？' },
+    ]);
+    const { llm, calls } = mockLlm([
+      '{"say": "昨夜は書斎の近くで物音を聞きました。あなたはどこにいましたか？"}',
+      '{"say": "では、デキャンタの件はどう思いますか？"}',
+    ]);
+    const r = await decideTalk(deps(llm), view);
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.user).toContain('ほぼ同じ内容');
+    expect(r?.say).toBe('では、デキャンタの件はどう思いますか？');
+  });
+
+  it('自分の発言に相手がまだ返していないとき、繰り返さないよう指示する', async () => {
+    const { llm, calls } = mockLlm(['{"say": "別の話をします。"}']);
+    await decideTalk(deps(llm), viewOf(0, [{ seat: 0, body: '昨夜はどちらに？' }]));
+    expect(calls[0]!.user).toContain('まだ返事をしていません');
+    const { llm: llm2, calls: calls2 } = mockLlm(['{"say": "はい。"}']);
+    await decideTalk(deps(llm2), viewOf(0, [{ seat: 1, body: '部屋にいました' }]));
+    expect(calls2[0]!.user).not.toContain('まだ返事をしていません');
+  });
+
   it('API失敗・タイムアウトのときは null（発言しない）', async () => {
     const { llm } = mockLlm([new Error('timeout')]);
     expect(await decideTalk(deps(llm), viewOf(0))).toBeNull();
@@ -236,6 +260,11 @@ describe('補助関数', () => {
     expect(copiesSecret(`私は${secret.slice(3, 25)}です`, secret)).toBe(true);
     expect(copiesSecret('あいうえお、かきくけこ、さしすせそ', secret)).toBe(false);
     expect(copiesSecret('短い', '短い秘密')).toBe(false);
+  });
+
+  it('similarity：言い換えは高く、別の話は低い', () => {
+    expect(similarity('昨夜はどこにいましたか？', '昨夜はどこにいましたか。')).toBe(1);
+    expect(similarity('昨夜はどこにいましたか？', 'デキャンタの蓋が外れていた')).toBeLessThan(0.2);
   });
 
   it('Budget：80%で slow、100%で exhausted', () => {

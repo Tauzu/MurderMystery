@@ -100,12 +100,25 @@ function context(view: RoomView): string {
   ].join('\n\n');
 }
 
-export function talkPrompt(view: RoomView): string {
+export function talkPrompt(view: RoomView, avoidRepeat = false): string {
   const name = (seat: number) => view.seats[seat]!.name;
   const me = name(view.me.seat);
+  const last = view.chat.filter((m) => m.scope === 'pair' && m.setNo === view.setNo).at(-1);
+  const notes: string[] = [];
+  if (last?.seat === view.me.seat) {
+    notes.push(
+      'あなたの直前の発言に、相手はまだ返事をしていません。同じ話を繰り返さず、別の角度の質問か、新しい情報を出してください。',
+    );
+  }
+  if (avoidRepeat) {
+    notes.push(
+      '前回の案は、あなたの過去の発言とほぼ同じ内容でした。過去の発言と違う言い回し・内容にしてください。',
+    );
+  }
   return [
     context(view),
     `■ 今回の指示\nいまは${name(partnerOf(view.me.seat, view.setNo))}と2人で会話する時間です（第${view.setNo}回）。他の人にはこの会話は聞こえません。${me}として、次の発言を1つだけ出力してください。`,
+    ...(notes.length > 0 ? [`■ 注意\n${notes.join('\n')}`] : []),
     `出力形式：JSONのみ。例 {"say": "……"}（${CONFIG.NPC_MAX_CHARS}文字以内）`,
   ].join('\n\n');
 }

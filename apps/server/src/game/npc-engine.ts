@@ -99,6 +99,11 @@ export class NpcEngine {
       schedule.at = now + CONFIG.NPC_TALK_COLLISION_SEC * 1000;
       return;
     }
+    // 自分の発言に相手がまだ返していないときは、しばらく待つ（同じ話の繰り返しを避ける）
+    if (last && last.seat === seat && now - last.at < CONFIG.NPC_FOLLOWUP_WAIT_SEC * 1000) {
+      schedule.at = last.at + CONFIG.NPC_FOLLOWUP_WAIT_SEC * 1000;
+      return;
+    }
 
     this.once(room, `talk:${seat}`, async () => {
       // 古い状態で発言しないよう、呼び出す直前の状態を使う

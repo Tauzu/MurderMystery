@@ -17,6 +17,18 @@ let clock = 1_800_000_000_000;
 const advance = (sec: number) => (clock += sec * 1000);
 
 /** どの席に何を聞かれても決まった答えを返すAI。呼び出しの内容は記録する。 */
+/** 自分の過去の発言との重複検査に引っかからないよう、内容の違う発言を順に返す */
+const SAYS = [
+  '昨夜の行動を順に教えてください。',
+  'デキャンタの蓋が外れていた件が気になります。',
+  '鍵を拾った時刻をもう一度確認させてください。',
+  '電話の記録には、前後の空白がありますね。',
+  '書斎の扉が開いていたのは不自然です。',
+  '誰が最後にラウンジを出ましたか。',
+  '医療用の瓶のようなものが見つかっています。',
+  '廊下の金属音について詳しく聞かせてください。',
+];
+
 function fakeLlm(mode: 'ok' | 'down' = 'ok') {
   const calls: LlmRequest[] = [];
   const llm: LlmClient = {
@@ -24,7 +36,7 @@ function fakeLlm(mode: 'ok' | 'down' = 'ok') {
       calls.push(req);
       if (mode === 'down') throw new Error('API down');
       const text = req.user.includes('次の発言を1つ')
-        ? '{"say": "皆さんの話を整理しましょう。"}'
+        ? `{"say": "${SAYS[calls.length % SAYS.length]}"}`
         : req.user.includes('投票の時間')
           ? '{"target": 0, "reason": "なんとなく"}'
           : `{"cardId": "${/\[(\w[\w-]*)\]（未公開）/.exec(req.user)?.[1] ?? ''}"}`;
@@ -34,9 +46,9 @@ function fakeLlm(mode: 'ok' | 'down' = 'ok') {
   return { llm, calls };
 }
 
-function managerWith(llm: LlmClient) {
+function managerWith(llm: LlmClient, idle: { idleSwitchSec?: number; idleWarnSec?: number } = {}) {
   const engine = new NpcEngine({ llm, now: () => clock, rng: () => 0.5 });
-  return new RoomManager({ db, redis, now: () => clock, rng: () => 0.5, npc: engine });
+  return new RoomManager({ db, redis, now: () => clock, rng: () => 0.5, npc: engine, ...idle });
 }
 
 let scenarioId = '';
@@ -104,9 +116,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
       await settle();
       const spoken = state().chat.slice(before);
       expect(spoken.length).toBeGreaterThan(0);
-      expect(spoken.every((m) => m.seat !== 0 && m.body === '皆さんの話を整理しましょう。')).toBe(
-        true,
-      );
+      expect(spoken.every((m) => m.seat !== 0 && SAYS.includes(m.body))).toBe(true);
 
       await mgr.dispatch(roomId, { type: 'AgreeEndTalk', seat: 0 });
       await mgr.tickAll();
@@ -122,6 +132,41 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const votes = state().votes;
     for (const seat of [1, 2, 3]) expect(votes[seat]).not.toBe(seat);
     expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it('相手が返事をしないうちは、同じNPCが続けて話さない', async () => {
+    const { llm } = fakeLlm();
+    // 人間が黙ったままでも、無操作で切り替わらないよう長くしておく
+    const mgr = managerWith(llm, { idleSwitchSec: 100_000, idleWarnSec: 99_000 });
+    const roomId = await startOneHumanGame(mgr);
+    const state = () => mgr.getState(roomId)!.state;
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
+    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.tickAll();
+    await settle();
+    await mgr.tickAll();
+    expect(state().phase).toBe('TALK');
+
+    // セット1の席0の相手は席1。席0（人間）は黙ったまま
+    const fromSeat1 = () => state().chat.filter((m) => m.seat === 1).length;
+    await mgr.tickAll();
+    advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1);
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(1);
+
+    advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1); // 通常の間隔は過ぎたが、まだ待つ
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(1);
+
+    advance(CONFIG.NPC_FOLLOWUP_WAIT_SEC);
+    await mgr.tickAll();
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(2);
   });
 
   it('NPCに渡したプロンプトに、他の席の状況文・未公開カードは含まれない', async () => {

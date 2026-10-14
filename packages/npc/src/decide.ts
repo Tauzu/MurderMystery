@@ -55,6 +55,30 @@ export function copiesSecret(say: string, secret: string, minLen = 20): boolean 
   return false;
 }
 
+/** 文字2つ組の重なり具合（0〜1）。記号・空白は無視する。 */
+export function similarity(a: string, b: string): number {
+  const grams = (s: string) => {
+    const t = s.replace(/[\s、。，．,.!！?？「」『』…・ー-]/g, '');
+    const set = new Set<string>();
+    for (let i = 0; i + 2 <= t.length; i++) set.add(t.slice(i, i + 2));
+    return set;
+  };
+  const x = grams(a);
+  const y = grams(b);
+  if (x.size === 0 || y.size === 0) return 0;
+  let common = 0;
+  for (const g of x) if (y.has(g)) common++;
+  return (2 * common) / (x.size + y.size);
+}
+
+/** 自分の直近の発言とほぼ同じ内容か。 */
+export function repeatsOwn(say: string, view: RoomView, threshold = 0.5): boolean {
+  return view.chat
+    .filter((m) => m.seat === view.me.seat)
+    .slice(-3)
+    .some((m) => similarity(say, m.body) >= threshold);
+}
+
 async function call(deps: NpcDeps, view: RoomView, user: string) {
   const res = await deps.llm.complete({
     model: deps.model ?? CONFIG.NPC_MODEL,
@@ -79,8 +103,9 @@ export async function decideTalk(
   const filler = { say: pick(FILLER_LINES, deps.rng), source: 'fallback' as const };
   if (deps.budget.exhausted) return filler;
 
-  const user = talkPrompt(view);
   for (let attempt = 0; attempt < 2; attempt++) {
+    // 2回目は、直前の発言との重複を避けるよう強く指示する
+    const user = talkPrompt(view, attempt > 0);
     let text: string;
     try {
       text = await call(deps, view, user);
@@ -91,7 +116,13 @@ export async function decideTalk(
     const say = parseJsonObject(text)?.say;
     if (typeof say !== 'string') continue;
     const trimmed = say.trim().slice(0, CONFIG.NPC_MAX_CHARS);
-    if (trimmed.length === 0 || copiesSecret(trimmed, view.me.situationText)) continue;
+    if (
+      trimmed.length === 0 ||
+      copiesSecret(trimmed, view.me.situationText) ||
+      repeatsOwn(trimmed, view)
+    ) {
+      continue;
+    }
     return { say: trimmed, source: 'ai' };
   }
   return filler;
