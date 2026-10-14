@@ -293,3 +293,32 @@ ul.plain li:last-child {
   font-size: 1.08rem;
   line-height: 1.9;
 }
+
+.wide.wider {
+  max-width: 1100px;
+}
+
+.confirm-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 300px;
+  align-items: start;
+}
+
+.confirm-main {
+  order: 1;
+}
+
+.confirm-seats {
+  order: 2;
+}
+
+@media (max-width: 960px) {
+  .confirm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .confirm-seats {
+    order: 0;
+  }
+}

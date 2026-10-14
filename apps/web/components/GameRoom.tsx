@@ -44,10 +44,21 @@ export function GameRoom({ roomId }: { roomId: string }) {
       <Banners socket={socket} />
       {view.phase === 'INTRO' || view.phase === 'CONFIRM' ? (
         // 冒頭文・状況文の初表示は、読むことに集中できるよう画面いっぱいに出す
-        <div className="wide">
+        <div className={view.phase === 'CONFIRM' ? 'wide wider' : 'wide'}>
           <IntroPanel view={view} />
-          <PhaseMain socket={socket} view={view} nameOf={nameOf} />
-          {view.phase === 'CONFIRM' && <SeatsPanel view={view} />}
+          {view.phase === 'CONFIRM' ? (
+            // 登場人物は、状況文を読みながら見比べられるよう横（狭い画面では上）に置く
+            <div className="confirm-grid">
+              <div className="confirm-seats">
+                <SeatsPanel view={view} />
+              </div>
+              <div className="confirm-main">
+                <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+              </div>
+            </div>
+          ) : (
+            <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+          )}
         </div>
       ) : (
         <div className="layout">
