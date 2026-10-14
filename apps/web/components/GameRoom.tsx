@@ -42,19 +42,28 @@ export function GameRoom({ roomId }: { roomId: string }) {
     <>
       <Header socket={socket} view={view} />
       <Banners socket={socket} />
-      <div className="layout">
-        <aside>
+      {view.phase === 'INTRO' || view.phase === 'CONFIRM' ? (
+        // 冒頭文・状況文の初表示は、読むことに集中できるよう画面いっぱいに出す
+        <div className="wide">
           <IntroPanel view={view} />
-          <MyPanel view={view} />
-        </aside>
-        <section>
           <PhaseMain socket={socket} view={view} nameOf={nameOf} />
-        </section>
-        <aside>
-          <SeatsPanel view={view} />
-          <RevealedPanel view={view} nameOf={nameOf} />
-        </aside>
-      </div>
+          {view.phase === 'CONFIRM' && <SeatsPanel view={view} />}
+        </div>
+      ) : (
+        <div className="layout">
+          <aside>
+            <IntroPanel view={view} />
+            <MyPanel view={view} />
+          </aside>
+          <section>
+            <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+          </section>
+          <aside>
+            <SeatsPanel view={view} />
+            <RevealedPanel view={view} nameOf={nameOf} />
+          </aside>
+        </div>
+      )}
     </>
   );
 }
@@ -113,38 +122,9 @@ function IntroPanel({ view }: { view: RoomView }) {
   );
 }
 
-/** 自分のキャラクター・状況文・手札。 */
-function MyPanel({ view }: { view: RoomView }) {
-  const me = view.seats.find((s) => s.seat === view.me.seat)!;
-  return (
-    <div className="panel">
-      <h2>あなた：{me.name}</h2>
-      {view.me.isCulprit && (
-        <p className="error">
-          <strong>あなたが犯人です。</strong>正体を隠し通してください。
-        </p>
-      )}
-      {view.phase === 'INTRO' ? (
-        // 冒頭文を読み終えるまでは、状況文も手札も出さない（情報が多すぎるため）
-        <p className="muted">冒頭文を読み終えると、あなたの状況と手札が表示されます。</p>
-      ) : (
-        <MyDetails view={view} />
-      )}
-    </div>
-  );
-}
-
-function MyDetails({ view }: { view: RoomView }) {
+function HandCards({ view }: { view: RoomView }) {
   return (
     <>
-      <details
-        className="fold"
-        key={view.phase === 'CONFIRM' ? 'open' : 'closed'}
-        open={view.phase === 'CONFIRM'}
-      >
-        <summary>自分の状況（クリックで開く）</summary>
-        <p className="prose">{view.me.situationText}</p>
-      </details>
       <h3>手札</h3>
       <div style={{ display: 'grid', gap: 8 }}>
         {view.me.cards.map((c) => (
@@ -158,6 +138,58 @@ function MyDetails({ view }: { view: RoomView }) {
         ))}
       </div>
     </>
+  );
+}
+
+function CulpritNotice({ view }: { view: RoomView }) {
+  if (!view.me.isCulprit) return null;
+  return (
+    <p className="error">
+      <strong>あなたが犯人です。</strong>正体を隠し通してください。
+    </p>
+  );
+}
+
+/** 会話中などの左欄。状況文は折りたたみで、クリックしたときだけ読める。 */
+function MyPanel({ view }: { view: RoomView }) {
+  const me = view.seats.find((s) => s.seat === view.me.seat)!;
+  return (
+    <div className="panel">
+      <h2>あなた：{me.name}</h2>
+      <CulpritNotice view={view} />
+      <details className="fold">
+        <summary>自分の状況（クリックで開く）</summary>
+        <p className="prose">{view.me.situationText}</p>
+      </details>
+      <HandCards view={view} />
+    </div>
+  );
+}
+
+/** 確認フェーズ。自分の状況文と手札を、画面いっぱいに出す。 */
+function ConfirmScreen({
+  socket,
+  view,
+  disabled,
+}: {
+  socket: GameSocket;
+  view: RoomView;
+  disabled: boolean;
+}) {
+  const me = view.seats.find((s) => s.seat === view.me.seat)!;
+  return (
+    <div className="panel big">
+      <h2>あなたは {me.name} です</h2>
+      <p className="muted">{me.publicProfile}</p>
+      <CulpritNotice view={view} />
+      <h3>あなただけが知っている状況</h3>
+      <p className="prose">{view.me.situationText}</p>
+      <HandCards view={view} />
+      <p className="muted">
+        手札は、会話のあと1枚ずつ全員に公開していきます。読み終えたら「準備完了」を押してください。
+      </p>
+      <ReadyButton socket={socket} view={view} label="準備完了" disabled={disabled} />
+    </div>
   );
 }
 
@@ -263,22 +295,14 @@ function PhaseMain({
   switch (view.phase) {
     case 'INTRO':
       return (
-        <div className="panel">
+        <div className="panel big">
           <h2>事件の発端</h2>
           <p className="prose">{view.introText}</p>
           <ReadyButton socket={socket} view={view} label="読み終えた" disabled={disabled} />
         </div>
       );
     case 'CONFIRM':
-      return (
-        <div className="panel">
-          <h2>キャラクターの確認</h2>
-          <p>
-            左の「あなた」の欄で、自分の状況と手札を確認してください。右の欄には登場人物と、あなた以外の人が見られる設定が並んでいます。
-          </p>
-          <ReadyButton socket={socket} view={view} label="準備完了" disabled={disabled} />
-        </div>
-      );
+      return <ConfirmScreen socket={socket} view={view} disabled={disabled} />;
     case 'REVEAL':
       return <RevealPick socket={socket} view={view} disabled={disabled} />;
     case 'TALK':
