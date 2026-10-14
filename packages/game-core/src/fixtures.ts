@@ -21,6 +21,7 @@ export function fixtureScenario(): ScenarioData {
   return {
     introText: 'INTRO-TEXT',
     endingText: 'ENDING-TEXT',
+    victim: { name: 'VICTIM-NAME', profile: 'VICTIM-PROFILE' },
     characters: NAMES.map((n, i) => ({
       id: `char-${n}`,
       name: `名前${n}`,

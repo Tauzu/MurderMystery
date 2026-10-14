@@ -35,6 +35,9 @@ export const scenarioContentSchema = z
     summary: text(SCENARIO_LIMITS.summary),
     introText: text(SCENARIO_LIMITS.introText),
     endingText: text(SCENARIO_LIMITS.endingText),
+    /** 被害者。登場人物欄に表示する。省略可 */
+    victimName: text(SCENARIO_LIMITS.characterName).optional(),
+    victimProfile: text(SCENARIO_LIMITS.publicProfile).optional(),
     characters: z.array(characterSchema).length(SEAT_COUNT),
   })
   .superRefine((value, ctx) => {

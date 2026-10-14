@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/main.ts",
     "start": "tsx src/main.ts",
+    "eval:npc": "tsx scripts/npc-eval.ts",
+    "eval:balance": "tsx scripts/npc-balance.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "prisma db seed",
+    "db:reseed": "tsx prisma/seed.ts --replace",
     "pretypecheck": "prisma generate",
     "pretest": "prisma generate"
   },

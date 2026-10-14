@@ -253,3 +253,72 @@ ul.plain li {
 ul.plain li:last-child {
   border-bottom: 0;
 }
+
+.fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.group h3 {
+  margin: 12px 0 6px;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.card.compact {
+  margin-bottom: 6px;
+  padding: 8px 10px;
+}
+
+.card.latest {
+  border-color: var(--accent);
+}
+
+.badge.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.wide {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.panel.big {
+  padding: 24px 28px;
+}
+
+.panel.big .prose {
+  font-size: 1.08rem;
+  line-height: 1.9;
+}
+
+.wide.wider {
+  max-width: 1100px;
+}
+
+.confirm-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr 300px;
+  align-items: start;
+}
+
+.confirm-main {
+  order: 1;
+}
+
+.confirm-seats {
+  order: 2;
+}
+
+@media (max-width: 960px) {
+  .confirm-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .confirm-seats {
+    order: 0;
+  }
+}

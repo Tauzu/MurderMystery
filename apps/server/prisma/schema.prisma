@@ -45,6 +45,8 @@ model Scenario {
   summary        String
   introText      String         @map("intro_text")
   endingText     String         @map("ending_text")
+  victimName     String?        @map("victim_name")
+  victimProfile  String?        @map("victim_profile")
   status         ScenarioStatus @default(draft)
   checkResult    Json?          @map("check_result")
   contentVersion Int            @default(1) @map("content_version")

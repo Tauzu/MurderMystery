@@ -1,3 +1,6 @@
+import { cp, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { seedScenarios } from './seed';
@@ -46,6 +49,36 @@ describe('seed', () => {
     expect(again.created).toEqual([]);
     expect(again.skipped).toContain('001-yukiyama-sansou');
     expect(await t.db.scenario.count({ where: { slug: '001-yukiyama-sansou' } })).toBe(1);
+  });
+
+  it('replace を指定すると、登録済みのシナリオを対戦記録ごと作り直す', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mm-seed-'));
+    try {
+      const file = join(dir, 'test-replace.json');
+      await cp(join(scenariosDir, '001-yukiyama-sansou.json'), file);
+      const edit = async (title: string) => {
+        const json = JSON.parse(await readFile(file, 'utf-8'));
+        await writeFile(file, JSON.stringify({ ...json, slug: 'test-replace', title }));
+      };
+
+      await edit('最初の版');
+      await seedScenarios(t.db, dir);
+      await edit('直した版');
+      const kept = await seedScenarios(t.db, dir);
+      expect(kept.skipped).toContain('test-replace');
+      expect(
+        (await t.db.scenario.findUniqueOrThrow({ where: { slug: 'test-replace' } })).title,
+      ).toBe('最初の版');
+
+      const replaced = await seedScenarios(t.db, dir, { replace: true });
+      expect(replaced.created).toContain('test-replace');
+      expect(
+        (await t.db.scenario.findUniqueOrThrow({ where: { slug: 'test-replace' } })).title,
+      ).toBe('直した版');
+    } finally {
+      await t.db.scenario.deleteMany({ where: { slug: 'test-replace' } });
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it('犯人を2人にすることはDBの制約でも拒否される', async () => {

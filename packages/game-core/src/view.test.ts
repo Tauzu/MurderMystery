@@ -90,6 +90,16 @@ describe('projectView（秘匿の保証）', () => {
     }
   });
 
+  it('被害者は全員に見える', () => {
+    const s = newRoom();
+    for (const seat of SEATS) {
+      expect(projectView(s, seat, T0).victim).toEqual({
+        name: 'VICTIM-NAME',
+        profile: 'VICTIM-PROFILE',
+      });
+    }
+  });
+
   it('自分のキャラの情報は見られる', () => {
     const s = newRoom();
     for (const seat of SEATS) {
@@ -149,5 +159,68 @@ describe('projectView（秘匿の保証）', () => {
     const restored = JSON.parse(JSON.stringify(s)) as RoomState;
     expect(restored).toEqual(s);
     expect(allReady(restored, T0 + 1).phase).toBe('REVEAL');
+  });
+});
+
+describe('projectView（2人1組の会話）', () => {
+  /** セット1の会話で、各席が「席N」と発言した状態 */
+  function talkingRoom() {
+    let s = allReady(allReady(newRoom(), T0), T0);
+    for (const seat of SEATS) {
+      const ch = characterOf(s, s.seats[seat]!);
+      s = apply(s, { type: 'PickCard', seat, cardId: ch.cards[0]!.id }, T0 + 1).state;
+    }
+    for (const seat of SEATS) s = apply(s, { type: 'Chat', seat, body: `席${seat}` }, T0 + 2).state;
+    return s;
+  }
+
+  it('会話中は、自分と組の相手の発言だけが見える（セット1は 0-1・2-3）', () => {
+    const s = talkingRoom();
+    const bodies = (seat: number) => projectView(s, seat, T0).chat.map((m) => m.body);
+    expect(bodies(0)).toEqual(['席0', '席1']);
+    expect(bodies(1)).toEqual(['席0', '席1']);
+    expect(bodies(2)).toEqual(['席2', '席3']);
+    expect(bodies(3)).toEqual(['席2', '席3']);
+  });
+
+  it('組が変わっても、過去のセットの会話は自分が参加した分だけ見える', () => {
+    let s = allAgreeEnd(talkingRoom(), T0 + 3);
+    for (const seat of SEATS) {
+      const ch = characterOf(s, s.seats[seat]!);
+      const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
+      s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 4).state;
+    }
+    expect(s.setNo).toBe(2);
+    for (const seat of SEATS)
+      s = apply(s, { type: 'Chat', seat, body: `第2回の席${seat}` }, T0 + 5).state;
+    // 席0 は、第1回は席1、第2回は席2と話した
+    expect(projectView(s, 0, T0).chat.map((m) => m.body)).toEqual([
+      '席0',
+      '席1',
+      '第2回の席0',
+      '第2回の席2',
+    ]);
+  });
+
+  it('結果が出ると、他の組の会話も含めて全部見える', () => {
+    let s = talkingRoom();
+    s = allAgreeEnd(s, T0 + 3);
+    for (let set = 2; set <= 3; set++) {
+      for (const seat of SEATS) {
+        const ch = characterOf(s, s.seats[seat]!);
+        const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
+        s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 4).state;
+      }
+      s = allAgreeEnd(s, T0 + 5);
+    }
+    const c = culpritSeat(s);
+    for (const seat of SEATS) {
+      s = apply(s, { type: 'Vote', seat, target: seat === c ? (c + 1) % 4 : c }, T0 + 6).state;
+    }
+    expect(s.phase).toBe('RESULT');
+    s = apply(s, { type: 'Chat', seat: 3, body: '感想戦' }, T0 + 7).state;
+    const chat = projectView(s, 0, T0).chat;
+    expect(chat.map((m) => m.body)).toContain('席2');
+    expect(chat.at(-1)).toMatchObject({ body: '感想戦', scope: 'all' });
   });
 });

@@ -4,6 +4,8 @@ import type { Phase } from '@mm/shared';
 export interface ScenarioData {
   introText: string;
   endingText: string;
+  /** 被害者（任意）。登場人物欄とNPCのプロンプトに出す */
+  victim: { name: string; profile: string } | null;
   characters: CharacterData[];
 }
 
@@ -49,6 +51,8 @@ export interface ChatMessage {
   id: number;
   seat: number;
   setNo: number;
+  /** pair＝TALK中の2人1組の会話（組の2人にだけ見える）、all＝結果後の感想戦（全員に見える） */
+  scope: 'pair' | 'all';
   body: string;
   at: number;
 }
@@ -133,4 +137,8 @@ export interface Context {
   now: number;
   /** 0以上1未満の乱数 */
   rng: () => number;
+  /** 無操作で NPC に切り替えるまでの秒数。省略時は CONFIG の値（テストプレイで延ばすために上書きできる） */
+  idleSwitchSec?: number;
+  /** 切替の警告を出すまでの秒数。省略時は CONFIG の値 */
+  idleWarnSec?: number;
 }

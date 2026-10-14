@@ -22,6 +22,12 @@ export function characterOf(state: RoomState, seat: Seat): CharacterData {
   return c;
 }
 
+/**
+ * セット setNo の会話相手の席。席を 0〜3 とすると、セット1は 0-1・2-3、セット2は 0-2・1-3、
+ * セット3は 0-3・1-2 となり、3セットで全員が他の3人と1回ずつ組む。
+ */
+export const partnerOf = (seat: number, setNo: number): number => seat ^ setNo;
+
 const err = (code: RoomError['code'], message: string): RoomError => ({ code, message });
 const wrongPhase = () => err('wrong_phase', '今はその操作ができません');
 
@@ -97,7 +103,8 @@ function applyEvent(
     }
 
     case 'Chat': {
-      if (state.phase !== 'TALK') return wrongPhase();
+      // TALK は2人1組の会話、RESULT は全員での感想戦
+      if (state.phase !== 'TALK' && state.phase !== 'RESULT') return wrongPhase();
       const seat = state.seats[event.seat];
       if (!seat) return err('invalid_seat', '席が不正です');
       const body = event.body.trim();
@@ -109,6 +116,7 @@ function applyEvent(
         id: state.nextChatId++,
         seat: seat.index,
         setNo: state.setNo,
+        scope: state.phase === 'TALK' ? 'pair' : 'all',
         body,
         at: ctx.now,
       });
@@ -179,15 +187,17 @@ function processIdle(state: RoomState, ctx: Context, effects: Effect[]) {
       continue;
     }
     const idle = ctx.now - seat.lastActiveAt;
-    if (idle >= sec(CONFIG.IDLE_SWITCH_SEC)) {
+    const switchSec = ctx.idleSwitchSec ?? CONFIG.IDLE_SWITCH_SEC;
+    const warnSec = ctx.idleWarnSec ?? CONFIG.IDLE_WARN_SEC;
+    if (idle >= sec(switchSec)) {
       switchSeat(state, seat, ctx, effects);
       if (state.aborted) return;
-    } else if (idle >= sec(CONFIG.IDLE_WARN_SEC) && !seat.warned) {
+    } else if (idle >= sec(warnSec) && !seat.warned) {
       seat.warned = true;
       effects.push({
         type: 'Warn',
         seat: seat.index,
-        switchInSec: Math.ceil((sec(CONFIG.IDLE_SWITCH_SEC) - idle) / 1000),
+        switchInSec: Math.ceil((sec(switchSec) - idle) / 1000),
       });
     }
   }

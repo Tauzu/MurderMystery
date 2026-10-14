@@ -15,7 +15,7 @@ import {
   newRoom,
   playToVote,
 } from './fixtures';
-import { createRoom, reduce } from './index';
+import { createRoom, partnerOf, reduce } from './index';
 import type { RoomEvent, RoomState } from './types';
 
 const sec = (s: number) => s * 1000;
@@ -124,7 +124,35 @@ describe('通しの進行（全員が人間）', () => {
     );
     s = allPick(s, T0 + 1);
     s = apply(s, { type: 'Chat', seat: 1, body: '  私は何も知りません  ' }, T0 + 2).state;
-    expect(s.chat).toEqual([{ id: 1, seat: 1, setNo: 1, body: '私は何も知りません', at: T0 + 2 }]);
+    expect(s.chat).toEqual([
+      { id: 1, seat: 1, setNo: 1, scope: 'pair', body: '私は何も知りません', at: T0 + 2 },
+    ]);
+  });
+
+  it('結果が出た後は、全員に向けた感想戦の発言ができる', () => {
+    const base = playToVote(newRoom());
+    const c = culpritSeat(base);
+    let s = base;
+    for (const seat of SEATS)
+      s = apply(s, { type: 'Vote', seat, target: seat === c ? (c + 1) % 4 : c }, T0 + 2000).state;
+    expect(s.phase).toBe('RESULT');
+    s = apply(s, { type: 'Chat', seat: 2, body: 'お疲れさまでした' }, T0 + 2001).state;
+    expect(s.chat.at(-1)).toMatchObject({ seat: 2, scope: 'all' });
+  });
+
+  it('投票中の発言は拒否される', () => {
+    const s = playToVote(newRoom());
+    expect(reduce(s, { type: 'Chat', seat: 0, body: 'x' }, ctx(T0 + 2000)).error?.code).toBe(
+      'wrong_phase',
+    );
+  });
+
+  it('会話の組は、3セットで全員が他の3人と1回ずつ当たる', () => {
+    for (const seat of SEATS) {
+      const partners = [1, 2, 3].map((set) => partnerOf(seat, set));
+      expect([...partners].sort()).toEqual(SEATS.filter((x) => x !== seat));
+      for (const set of [1, 2, 3]) expect(partnerOf(partnerOf(seat, set), set)).toBe(seat);
+    }
   });
 
   it('全員が犯人に投票すると探偵側の勝ち', () => {
@@ -383,6 +411,20 @@ describe('無操作によるNPCへの切替', () => {
     expect(r.state.seats[0]?.kind).toBe('npc');
     expect(r.state.seats[0]?.userId).toBe('user-0'); // 元のユーザーを残す
     expect(r.state.aborted).toBe(false);
+  });
+
+  it('切替までの秒数を上書きすると、その分だけ待つ（テストプレイ用）', () => {
+    const s = allPick(allReady(allReady(newRoom(), T0), T0), T0);
+    const slow = {
+      ...ctx(T0 + sec(CONFIG.IDLE_SWITCH_SEC) + 1000),
+      idleSwitchSec: 1800,
+      idleWarnSec: 1770,
+    };
+    const r = reduce(s, { type: 'Tick' }, slow);
+    expect(r.state.seats[0]?.kind).toBe('human');
+    expect(r.effects).toEqual([]);
+    const later = reduce(s, { type: 'Tick' }, { ...slow, now: T0 + sec(1800) });
+    expect(later.state.seats[0]?.kind).toBe('npc');
   });
 
   it('操作すると無操作の時間は数え直される', () => {

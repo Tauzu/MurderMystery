@@ -12,6 +12,7 @@ import { CONFIG } from '@mm/shared';
 import type { Redis } from 'ioredis';
 import type { Db } from '../db';
 import { loadScenarioData } from './loader';
+import type { NpcEngine } from './npc-engine';
 import { createGameRecords, finishGame, markPlayed } from './persist';
 
 export interface RoomUpdate {
@@ -42,6 +43,11 @@ export interface RoomManagerOptions {
   rng?: () => number;
   /** 1秒ごとに全ルームへ Tick を送る。本番で有効にし、テストでは手動で tick() を呼ぶ */
   autoTick?: boolean;
+  /** NPC席の行動を決めるエンジン。無ければ、カード公開と投票はランダムに行う */
+  npc?: NpcEngine;
+  /** 無操作でNPCに切り替えるまでの秒数（省略時は CONFIG の値）。テストプレイで延ばす用 */
+  idleSwitchSec?: number;
+  idleWarnSec?: number;
 }
 
 const SNAPSHOT_TTL_SEC = 60 * 60 * 2;
@@ -70,10 +76,7 @@ export class RoomManager {
   async createRoom(scenarioId: string, participants: Participant[]): Promise<string> {
     const { db } = this.opts;
     const scenario = await loadScenarioData(db, scenarioId);
-    const state = createRoom(
-      { scenario: scenario.data, participants },
-      { now: this.now(), rng: this.rng },
-    );
+    const state = createRoom({ scenario: scenario.data, participants }, this.ctx());
     const { gameId, participationIds } = await createGameRecords(
       db,
       scenarioId,
@@ -93,6 +96,11 @@ export class RoomManager {
     this.rooms.set(gameId, room);
     await this.saveSnapshot(room);
     return gameId;
+  }
+
+  private ctx() {
+    const { idleSwitchSec, idleWarnSec } = this.opts;
+    return { now: this.now(), rng: this.rng, idleSwitchSec, idleWarnSec };
   }
 
   getState(roomId: string): { state: RoomState; seq: number } | null {
@@ -129,7 +137,7 @@ export class RoomManager {
       return Promise.resolve({ code: 'wrong_phase', message: 'ルームが見つかりません' });
     }
     return this.enqueue(room, async () => {
-      const result = reduce(room.state, event, { now: this.now(), rng: this.rng });
+      const result = reduce(room.state, event, this.ctx());
       if (result.error) return result.error;
       await this.commit(room, result.state, result.effects);
       return null;
@@ -141,7 +149,12 @@ export class RoomManager {
   }
 
   private async tickRoom(id: string): Promise<void> {
-    await this.actForNpcs(id);
+    const state = this.rooms.get(id)?.state;
+    if (state && this.opts.npc) {
+      this.opts.npc.step(id, state, (event) => this.dispatch(id, event));
+    } else {
+      await this.actForNpcs(id);
+    }
     await this.dispatch(id, { type: 'Tick' });
   }
 
@@ -194,6 +207,13 @@ export class RoomManager {
           'id' | 'scenarioId' | 'state' | 'seq' | 'participationIds' | 'recorded'
         >;
         if (this.rooms.has(saved.id) || saved.state.phase === 'CLOSED') continue;
+        // サーバーが止まっていた間を、無操作として数えない（開発中の自動再起動でも切り替わらないように）
+        for (const seat of saved.state.seats) {
+          if (seat.kind === 'human') {
+            seat.lastActiveAt = this.now();
+            seat.warned = false;
+          }
+        }
         this.rooms.set(saved.id, {
           ...saved,
           listeners: new Set(),

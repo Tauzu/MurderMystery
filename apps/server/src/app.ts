@@ -4,6 +4,7 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import type { Db } from './db';
 import { Matchmaker } from './game/matchmaker';
+import type { NpcEngine } from './game/npc-engine';
 import { RoomManager } from './game/room-manager';
 import { authRoutes } from './routes/auth';
 import { matchRoutes } from './routes/matches';
@@ -19,6 +20,10 @@ export interface AppOptions {
   autoTick?: boolean;
   now?: () => number;
   rng?: () => number;
+  /** NPC席の行動を決めるエンジン（AIを使う場合） */
+  npc?: NpcEngine;
+  idleSwitchSec?: number;
+  idleWarnSec?: number;
 }
 
 export interface AppDeps {
@@ -46,6 +51,9 @@ export function buildApp(opts: AppOptions) {
     autoTick: opts.autoTick,
     now: opts.now,
     rng: opts.rng,
+    npc: opts.npc,
+    idleSwitchSec: opts.idleSwitchSec,
+    idleWarnSec: opts.idleWarnSec,
   });
   const deps: AppDeps = {
     db: opts.db,

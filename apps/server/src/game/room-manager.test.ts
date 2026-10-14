@@ -239,6 +239,21 @@ describe('RoomManager：再起動からの復元', () => {
   });
 });
 
+describe('RoomManager：復元と無操作', () => {
+  it('サーバーが止まっていた間は、無操作として数えない', async () => {
+    const { roomId } = await startGame(4);
+    for (const seat of seats) await send(roomId, { type: 'Ready', seat });
+    advance(CONFIG.IDLE_SWITCH_SEC + 60); // 止まっていた間に、無操作の限度を超える時間が過ぎた
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    await restarted.tickAll();
+    const state = restarted.getState(roomId)!.state;
+    expect(state.seats.every((s) => s.kind === 'human')).toBe(true);
+    restarted.shutdown();
+  });
+});
+
 describe('RoomManager：NPC席の自動行動', () => {
   it('人間が全員行動済みなら、少し待つだけでカード公開と投票が進む', async () => {
     const { roomId } = await startGame(2);

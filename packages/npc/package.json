@@ -10,7 +10,8 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@mm/shared": "workspace:*",
-    "@mm/game-core": "workspace:*"
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@mm/game-core": "workspace:*",
+    "@mm/shared": "workspace:*"
   }
 }

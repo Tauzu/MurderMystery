@@ -22,6 +22,7 @@ export async function loadScenarioData(db: Db, scenarioId: string): Promise<Load
     data: {
       introText: s.introText,
       endingText: s.endingText,
+      victim: s.victimName ? { name: s.victimName, profile: s.victimProfile ?? '' } : null,
       characters: s.characters.map((c) => ({
         id: c.id,
         name: c.name,

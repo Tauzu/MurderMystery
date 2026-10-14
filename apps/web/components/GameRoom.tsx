@@ -42,18 +42,39 @@ export function GameRoom({ roomId }: { roomId: string }) {
     <>
       <Header socket={socket} view={view} />
       <Banners socket={socket} />
-      <div className="layout">
-        <aside>
-          <MyPanel view={view} />
-        </aside>
-        <section>
-          <PhaseMain socket={socket} view={view} nameOf={nameOf} />
-        </section>
-        <aside>
-          <SeatsPanel view={view} />
-          <RevealedPanel view={view} nameOf={nameOf} />
-        </aside>
-      </div>
+      {view.phase === 'INTRO' || view.phase === 'CONFIRM' ? (
+        // 冒頭文・状況文の初表示は、読むことに集中できるよう画面いっぱいに出す
+        <div className={view.phase === 'CONFIRM' ? 'wide wider' : 'wide'}>
+          <IntroPanel view={view} />
+          {view.phase === 'CONFIRM' ? (
+            // 登場人物は、状況文を読みながら見比べられるよう横（狭い画面では上）に置く
+            <div className="confirm-grid">
+              <div className="confirm-seats">
+                <SeatsPanel view={view} />
+              </div>
+              <div className="confirm-main">
+                <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+              </div>
+            </div>
+          ) : (
+            <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+          )}
+        </div>
+      ) : (
+        <div className="layout">
+          <aside>
+            <IntroPanel view={view} />
+            <MyPanel view={view} />
+          </aside>
+          <section>
+            <PhaseMain socket={socket} view={view} nameOf={nameOf} />
+          </section>
+          <aside>
+            <SeatsPanel view={view} />
+            <RevealedPanel view={view} nameOf={nameOf} />
+          </aside>
+        </div>
+      )}
     </>
   );
 }
@@ -101,19 +122,20 @@ function Banners({ socket }: { socket: GameSocket }) {
   );
 }
 
-/** 自分のキャラクター・状況文・手札。 */
-function MyPanel({ view }: { view: RoomView }) {
-  const me = view.seats.find((s) => s.seat === view.me.seat)!;
+/** 冒頭文。あとから読み返せるよう、折りたたんで常に置いておく（被害者の名前などを確認するため）。 */
+function IntroPanel({ view }: { view: RoomView }) {
+  if (view.phase === 'INTRO') return null; // 導入では本文を主画面に出している
   return (
-    <div className="panel">
-      <h2>あなた：{me.name}</h2>
-      {view.me.isCulprit && (
-        <p className="error">
-          <strong>あなたが犯人です。</strong>正体を隠し通してください。
-        </p>
-      )}
-      <h3>状況</h3>
-      <p className="prose">{view.me.situationText}</p>
+    <details className="panel fold">
+      <summary>事件の発端（冒頭文）</summary>
+      <p className="prose">{view.introText}</p>
+    </details>
+  );
+}
+
+function HandCards({ view }: { view: RoomView }) {
+  return (
+    <>
       <h3>手札</h3>
       <div style={{ display: 'grid', gap: 8 }}>
         {view.me.cards.map((c) => (
@@ -126,6 +148,58 @@ function MyPanel({ view }: { view: RoomView }) {
           </div>
         ))}
       </div>
+    </>
+  );
+}
+
+function CulpritNotice({ view }: { view: RoomView }) {
+  if (!view.me.isCulprit) return null;
+  return (
+    <p className="error">
+      <strong>あなたが犯人です。</strong>正体を隠し通してください。
+    </p>
+  );
+}
+
+/** 会話中などの左欄。状況文は折りたたみで、クリックしたときだけ読める。 */
+function MyPanel({ view }: { view: RoomView }) {
+  const me = view.seats.find((s) => s.seat === view.me.seat)!;
+  return (
+    <div className="panel">
+      <h2>あなた：{me.name}</h2>
+      <CulpritNotice view={view} />
+      <details className="fold">
+        <summary>自分の状況（クリックで開く）</summary>
+        <p className="prose">{view.me.situationText}</p>
+      </details>
+      <HandCards view={view} />
+    </div>
+  );
+}
+
+/** 確認フェーズ。自分の状況文と手札を、画面いっぱいに出す。 */
+function ConfirmScreen({
+  socket,
+  view,
+  disabled,
+}: {
+  socket: GameSocket;
+  view: RoomView;
+  disabled: boolean;
+}) {
+  const me = view.seats.find((s) => s.seat === view.me.seat)!;
+  return (
+    <div className="panel big">
+      <h2>あなたは {me.name} です</h2>
+      <p className="muted">{me.publicProfile}</p>
+      <CulpritNotice view={view} />
+      <h3>あなただけが知っている状況</h3>
+      <p className="prose">{view.me.situationText}</p>
+      <HandCards view={view} />
+      <p className="muted">
+        手札は、会話のあと1枚ずつ全員に公開していきます。読み終えたら「準備完了」を押してください。
+      </p>
+      <ReadyButton socket={socket} view={view} label="準備完了" disabled={disabled} />
     </div>
   );
 }
@@ -146,6 +220,13 @@ function SeatsPanel({ view }: { view: RoomView }) {
     <div className="panel">
       <h2>登場人物</h2>
       <ul className="plain">
+        {view.victim && (
+          <li>
+            <strong>{view.victim.name}</strong>
+            <span className="badge danger">被害者</span>
+            <div className="muted">{view.victim.profile}</div>
+          </li>
+        )}
         {view.seats.map((s) => (
           <li key={s.seat}>
             <strong>{s.name}</strong>
@@ -167,23 +248,47 @@ function SeatsPanel({ view }: { view: RoomView }) {
 }
 
 function RevealedPanel({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => string }) {
+  const [byPerson, setByPerson] = useState(true);
+  const groups = byPerson
+    ? view.seats.map((seat) => ({
+        key: String(seat.seat),
+        title: seat.name,
+        items: view.revealed.filter((r) => r.seat === seat.seat),
+      }))
+    : [1, 2, 3].map((setNo) => ({
+        key: String(setNo),
+        title: `第${setNo}セット`,
+        items: view.revealed.filter((r) => r.setNo === setNo),
+      }));
+
   return (
     <div className="panel">
-      <h2>公開されたカード</h2>
+      <div className="row spread">
+        <h2>公開されたカード</h2>
+        <button className="secondary" onClick={() => setByPerson(!byPerson)}>
+          {byPerson ? 'セット順で見る' : '人物別で見る'}
+        </button>
+      </div>
       {view.revealed.length === 0 && <p className="muted">まだ公開されていません。</p>}
-      <div style={{ display: 'grid', gap: 8 }}>
-        {view.revealed.map((r) => (
-          <div key={r.card.id} className="card">
-            <h4>
-              {r.card.title}
-              <span className="badge">
-                第{r.setNo}セット・{nameOf(r.seat)}
-              </span>
-            </h4>
-            <div className="prose">{r.card.body}</div>
+      {groups
+        .filter((g) => g.items.length > 0)
+        .map((g) => (
+          <div key={g.key} className="group">
+            <h3>{g.title}</h3>
+            {g.items.map((r) => (
+              <div
+                key={r.card.id}
+                className={`card compact ${r.setNo === view.setNo ? 'latest' : ''}`}
+              >
+                <h4>
+                  {r.card.title}
+                  <span className="badge">{byPerson ? `第${r.setNo}セット` : nameOf(r.seat)}</span>
+                </h4>
+                <div className="prose">{r.card.body}</div>
+              </div>
+            ))}
           </div>
         ))}
-      </div>
     </div>
   );
 }
@@ -201,22 +306,14 @@ function PhaseMain({
   switch (view.phase) {
     case 'INTRO':
       return (
-        <div className="panel">
+        <div className="panel big">
           <h2>事件の発端</h2>
           <p className="prose">{view.introText}</p>
           <ReadyButton socket={socket} view={view} label="読み終えた" disabled={disabled} />
         </div>
       );
     case 'CONFIRM':
-      return (
-        <div className="panel">
-          <h2>キャラクターの確認</h2>
-          <p>
-            左の「あなた」の欄で、自分の状況と手札を確認してください。右の欄には登場人物と、あなた以外の人が見られる設定が並んでいます。
-          </p>
-          <ReadyButton socket={socket} view={view} label="準備完了" disabled={disabled} />
-        </div>
-      );
+      return <ConfirmScreen socket={socket} view={view} disabled={disabled} />;
     case 'REVEAL':
       return <RevealPick socket={socket} view={view} disabled={disabled} />;
     case 'TALK':
@@ -224,7 +321,7 @@ function PhaseMain({
     case 'VOTE':
       return <Vote socket={socket} view={view} disabled={disabled} />;
     default:
-      return <Result view={view} nameOf={nameOf} />;
+      return <Result socket={socket} view={view} nameOf={nameOf} disabled={disabled} />;
   }
 }
 
@@ -294,6 +391,80 @@ function RevealPick({
   );
 }
 
+type ChatMessage = RoomView['chat'][number];
+
+function ChatLog({
+  messages,
+  nameOf,
+  empty,
+}: {
+  messages: ChatMessage[];
+  nameOf: (seat: number) => string;
+  empty: string;
+}) {
+  const bottom = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length]);
+
+  return (
+    <div className="chat">
+      {messages.length === 0 && <p className="muted">{empty}</p>}
+      {messages.map((m) => (
+        <p key={m.id}>
+          <span className="who">{nameOf(m.seat)}</span>
+          {m.body}
+        </p>
+      ))}
+      <div ref={bottom} />
+    </div>
+  );
+}
+
+function ChatInput({
+  socket,
+  disabled,
+  children,
+}: {
+  socket: GameSocket;
+  disabled: boolean;
+  children?: React.ReactNode;
+}) {
+  const [text, setText] = useState('');
+
+  const send = () => {
+    const body = text.trim();
+    if (!body || disabled) return;
+    socket.send({ type: 'chat', body });
+    setText('');
+  };
+
+  return (
+    <div className="row">
+      <input
+        type="text"
+        value={text}
+        maxLength={200}
+        placeholder="発言を入力（Enterで送信）"
+        disabled={disabled}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) send();
+        }}
+        style={{ flex: 1, minWidth: 200 }}
+      />
+      <button disabled={disabled || !text.trim()} onClick={send}>
+        送信
+      </button>
+      {children}
+    </div>
+  );
+}
+
+/** 席 seat のセット setNo での会話相手。サーバー（game-core の partnerOf）と同じ規則。 */
+const partnerOf = (seat: number, setNo: number) => seat ^ setNo;
+
 function Talk({
   socket,
   view,
@@ -305,52 +476,17 @@ function Talk({
   nameOf: (seat: number) => string;
   disabled: boolean;
 }) {
-  const [text, setText] = useState('');
-  const bottom = useRef<HTMLDivElement>(null);
-  const messages = view.chat;
   const agreed = view.agreedEndSeats.includes(view.me.seat);
-
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
-
-  const send = () => {
-    const body = text.trim();
-    if (!body || disabled) return;
-    socket.send({ type: 'chat', body });
-    setText('');
-  };
+  const partner = partnerOf(view.me.seat, view.setNo);
+  const current = view.chat.filter((m) => m.scope === 'pair' && m.setNo === view.setNo);
+  const past = view.chat.filter((m) => m.scope === 'pair' && m.setNo < view.setNo);
 
   return (
     <div className="panel">
-      <h2>推理と会話</h2>
-      <div className="chat">
-        {messages.length === 0 && <p className="muted">まだ発言がありません。</p>}
-        {messages.map((m) => (
-          <p key={m.id}>
-            <span className="who">{nameOf(m.seat)}</span>
-            {m.body}
-            {m.setNo !== view.setNo && <span className="badge">第{m.setNo}セット</span>}
-          </p>
-        ))}
-        <div ref={bottom} />
-      </div>
-      <div className="row">
-        <input
-          type="text"
-          value={text}
-          maxLength={200}
-          placeholder="発言を入力（Enterで送信）"
-          disabled={disabled}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) send();
-          }}
-          style={{ flex: 1, minWidth: 200 }}
-        />
-        <button disabled={disabled || !text.trim()} onClick={send}>
-          送信
-        </button>
+      <h2>{nameOf(partner)}さんと2人で会話</h2>
+      <p className="muted">この会話は、あなたと{nameOf(partner)}さんにしか見えません。</p>
+      <ChatLog messages={current} nameOf={nameOf} empty="まだ発言がありません。" />
+      <ChatInput socket={socket} disabled={disabled}>
         <button
           className="secondary"
           disabled={disabled || agreed}
@@ -358,8 +494,21 @@ function Talk({
         >
           {agreed ? '他の人を待っています…' : '話し終えた'}
         </button>
-      </div>
+      </ChatInput>
       <p className="muted">全員が「話し終えた」を押すと、時間前でも次へ進みます。</p>
+      {past.length > 0 && (
+        <details>
+          <summary>前の回の会話を見る</summary>
+          {[...new Set(past.map((m) => m.setNo))].map((setNo) => (
+            <div key={setNo}>
+              <h3>
+                第{setNo}セット：{nameOf(partnerOf(view.me.seat, setNo))}さんとの会話
+              </h3>
+              <ChatLog messages={past.filter((m) => m.setNo === setNo)} nameOf={nameOf} empty="" />
+            </div>
+          ))}
+        </details>
+      )}
     </div>
   );
 }
@@ -409,7 +558,17 @@ function Vote({
   );
 }
 
-function Result({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => string }) {
+function Result({
+  socket,
+  view,
+  nameOf,
+  disabled,
+}: {
+  socket: GameSocket;
+  view: RoomView;
+  nameOf: (seat: number) => string;
+  disabled: boolean;
+}) {
   const r = view.resultView;
   if (!r) return <p className="muted">結果を待っています…</p>;
   const culprit = r.result.culpritSeat;
@@ -469,6 +628,49 @@ function Result({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => st
               ))}
             </div>
           </div>
+        ))}
+      </div>
+
+      <div className="panel">
+        <h2>感想戦</h2>
+        <p className="muted">全員で話せます。NPCは発言しません。</p>
+        <ChatLog
+          messages={view.chat.filter((m) => m.scope === 'all')}
+          nameOf={nameOf}
+          empty="まだ発言がありません。"
+        />
+        <ChatInput socket={socket} disabled={disabled || view.phase !== 'RESULT'} />
+      </div>
+
+      <div className="panel">
+        <h2>各組の会話</h2>
+        <p className="muted">プレイ中は、自分の組の会話しか見えませんでした。</p>
+        {[1, 2, 3].map((setNo) => (
+          <details key={setNo}>
+            <summary>第{setNo}セット</summary>
+            {view.seats
+              .filter((s) => s.seat < partnerOf(s.seat, setNo))
+              .map((s) => {
+                const other = partnerOf(s.seat, setNo);
+                return (
+                  <div key={s.seat}>
+                    <h3>
+                      {nameOf(s.seat)} と {nameOf(other)}
+                    </h3>
+                    <ChatLog
+                      messages={view.chat.filter(
+                        (m) =>
+                          m.scope === 'pair' &&
+                          m.setNo === setNo &&
+                          (m.seat === s.seat || m.seat === other),
+                      )}
+                      nameOf={nameOf}
+                      empty="発言はありませんでした。"
+                    />
+                  </div>
+                );
+              })}
+          </details>
         ))}
       </div>
 
