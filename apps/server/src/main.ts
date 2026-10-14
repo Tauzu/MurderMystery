@@ -33,6 +33,9 @@ const app = buildApp({
   secureCookies: env.isProduction,
   autoTick: true,
   npc,
+  idleSwitchSec: env.idleSwitchSec,
+  // 警告は切替の30秒前（既定の 150秒/180秒 と同じ間隔）
+  idleWarnSec: env.idleSwitchSec === undefined ? undefined : Math.max(0, env.idleSwitchSec - 30),
 });
 
 const restored = await app.deps.rooms.restoreAll();

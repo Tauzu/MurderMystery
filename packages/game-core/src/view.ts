@@ -1,5 +1,5 @@
 import type { Phase } from '@mm/shared';
-import { characterOf } from './reduce';
+import { characterOf, partnerOf } from './reduce';
 import type { ChatMessage, GameResult, RoomState, SeatKind } from './types';
 
 export interface CardView {
@@ -113,7 +113,16 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
     myPick: state.picks[mySeat.index] ?? null,
     agreedEndSeats: [...state.agreedEnd],
     revealed,
-    chat: state.chat.map((m) => ({ ...m })),
+    // プレイ中は自分の組の会話だけ。他の組の会話は結果が出てから開示する
+    chat: state.chat
+      .filter(
+        (m) =>
+          showResult ||
+          m.scope === 'all' ||
+          m.seat === mySeat.index ||
+          m.seat === partnerOf(mySeat.index, m.setNo),
+      )
+      .map((m) => ({ ...m })),
     votedSeats: Object.keys(state.votes).map(Number),
     resultView:
       showResult && state.result

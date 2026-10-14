@@ -27,7 +27,7 @@ function orderedRoom() {
 function viewOf(seat: number, chat: { seat: number; body: string }[] = []): RoomView {
   const state = orderedRoom();
   state.phase = 'TALK';
-  state.chat = chat.map((c, i) => ({ id: i, setNo: 1, at: T0, ...c }));
+  state.chat = chat.map((c, i) => ({ id: i, setNo: 1, at: T0, scope: 'pair' as const, ...c }));
   return projectView(state, seat, T0);
 }
 
@@ -81,6 +81,19 @@ describe('プロンプト：知り得る情報だけを含む', () => {
   it('性格を指定すると、システムプロンプトに入る。指定しなければ入らない', () => {
     expect(systemPrompt(false, '慎重な性格')).toContain('あなたの性格：慎重な性格');
     expect(systemPrompt(false)).not.toContain('あなたの性格');
+  });
+
+  it('会話の相手の名前が入り、別の組の発言は含まれない', () => {
+    const state = orderedRoom();
+    state.phase = 'TALK';
+    const say = (seat: number, body: string) =>
+      state.chat.push({ id: state.chat.length, seat, setNo: 1, scope: 'pair', body, at: T0 });
+    say(0, 'AからBへ');
+    say(2, 'CからDへ');
+    const text = talkPrompt(projectView(state, 1, T0));
+    expect(text).toContain('名前Aと2人で会話');
+    expect(text).toContain('AからBへ');
+    expect(text).not.toContain('CからDへ');
   });
 
   it('公開済みカードは本文ごと入る', () => {
@@ -190,8 +203,8 @@ describe('decideVote', () => {
   it('自分への投票・範囲外はフォールバック（最も名指しされた人）', async () => {
     const chat = [
       { seat: 0, body: '名前Dが怪しい' },
-      { seat: 2, body: '名前Dはどう思う？' },
-      { seat: 3, body: '名前Bです' },
+      { seat: 1, body: '名前Dですか' },
+      { seat: 0, body: '名前Dはどう思う？' },
     ];
     const view = viewOf(1, chat);
     for (const bad of [1, 9, -1, 'x']) {

@@ -1,14 +1,10 @@
 import type { RoomView } from '@mm/game-core';
 import { CONFIG } from '@mm/shared';
 
-/** 自分のキャラが、最後の自分の発言より後に名指しされているか。設計書 §8.2。 */
+/** 今回の組の会話で、相手が最後に発言していて、自分がまだ返していないか。設計書 §8.2。 */
 export function isAddressed(view: RoomView): boolean {
-  const name = view.seats[view.me.seat]!.name;
-  let lastOwn = -1;
-  view.chat.forEach((m, i) => {
-    if (m.seat === view.me.seat) lastOwn = i;
-  });
-  return view.chat.slice(lastOwn + 1).some((m) => m.seat !== view.me.seat && m.body.includes(name));
+  const last = view.chat.filter((m) => m.scope === 'pair' && m.setNo === view.setNo).at(-1);
+  return last !== undefined && last.seat !== view.me.seat;
 }
 
 /**

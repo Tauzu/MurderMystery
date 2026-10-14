@@ -22,6 +22,8 @@ export interface AppOptions {
   rng?: () => number;
   /** NPC席の行動を決めるエンジン（AIを使う場合） */
   npc?: NpcEngine;
+  idleSwitchSec?: number;
+  idleWarnSec?: number;
 }
 
 export interface AppDeps {
@@ -50,6 +52,8 @@ export function buildApp(opts: AppOptions) {
     now: opts.now,
     rng: opts.rng,
     npc: opts.npc,
+    idleSwitchSec: opts.idleSwitchSec,
+    idleWarnSec: opts.idleWarnSec,
   });
   const deps: AppDeps = {
     db: opts.db,

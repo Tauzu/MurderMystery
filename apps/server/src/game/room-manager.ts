@@ -45,6 +45,9 @@ export interface RoomManagerOptions {
   autoTick?: boolean;
   /** NPC席の行動を決めるエンジン。無ければ、カード公開と投票はランダムに行う */
   npc?: NpcEngine;
+  /** 無操作でNPCに切り替えるまでの秒数（省略時は CONFIG の値）。テストプレイで延ばす用 */
+  idleSwitchSec?: number;
+  idleWarnSec?: number;
 }
 
 const SNAPSHOT_TTL_SEC = 60 * 60 * 2;
@@ -73,10 +76,7 @@ export class RoomManager {
   async createRoom(scenarioId: string, participants: Participant[]): Promise<string> {
     const { db } = this.opts;
     const scenario = await loadScenarioData(db, scenarioId);
-    const state = createRoom(
-      { scenario: scenario.data, participants },
-      { now: this.now(), rng: this.rng },
-    );
+    const state = createRoom({ scenario: scenario.data, participants }, this.ctx());
     const { gameId, participationIds } = await createGameRecords(
       db,
       scenarioId,
@@ -96,6 +96,11 @@ export class RoomManager {
     this.rooms.set(gameId, room);
     await this.saveSnapshot(room);
     return gameId;
+  }
+
+  private ctx() {
+    const { idleSwitchSec, idleWarnSec } = this.opts;
+    return { now: this.now(), rng: this.rng, idleSwitchSec, idleWarnSec };
   }
 
   getState(roomId: string): { state: RoomState; seq: number } | null {
@@ -132,7 +137,7 @@ export class RoomManager {
       return Promise.resolve({ code: 'wrong_phase', message: 'ルームが見つかりません' });
     }
     return this.enqueue(room, async () => {
-      const result = reduce(room.state, event, { now: this.now(), rng: this.rng });
+      const result = reduce(room.state, event, this.ctx());
       if (result.error) return result.error;
       await this.commit(room, result.state, result.effects);
       return null;

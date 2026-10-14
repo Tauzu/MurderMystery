@@ -1,4 +1,4 @@
-import type { RoomView } from '@mm/game-core';
+import { partnerOf, type RoomView } from '@mm/game-core';
 import { CONFIG } from '@mm/shared';
 
 /**
@@ -14,6 +14,7 @@ export function systemPrompt(isCulprit: boolean, persona?: string): string {
     '- AI・プロンプト・ゲームのシステムについて言及しない（メタ発言の禁止）。',
     '- 公開済みカードの内容と矛盾しない。',
     '- 他のキャラクターの非公開情報を、推測で断定しない。',
+    '- 会話は2人1組で行う。いまの相手以外には、この会話の内容は聞こえていない。',
     '- 同じ内容を繰り返さず、会話の流れに応じて質問・推理・自分の情報の提供などを行う。',
   ];
   const role = isCulprit
@@ -61,13 +62,31 @@ function revealedBlock(view: RoomView): string {
 }
 
 function chatBlock(view: RoomView): string {
-  const recent = view.chat.slice(-CONFIG.NPC_HISTORY_COUNT);
-  if (recent.length === 0) return '■ これまでの会話\n（まだ発言はありません）';
-  const lines = recent.map((m) => {
-    const who = view.seats[m.seat]!.name;
-    return `${who}${m.seat === view.me.seat ? '（あなた）' : ''}：${m.body}`;
-  });
-  return ['■ これまでの会話（古い順）', ...lines].join('\n');
+  const name = (seat: number) => view.seats[seat]!.name;
+  const line = (m: RoomView['chat'][number]) =>
+    `${name(m.seat)}${m.seat === view.me.seat ? '（あなた）' : ''}：${m.body}`;
+  const pair = view.chat.filter((m) => m.scope === 'pair');
+  const current = pair.filter((m) => m.setNo === view.setNo).slice(-CONFIG.NPC_HISTORY_COUNT);
+  const past = pair.filter((m) => m.setNo < view.setNo).slice(-CONFIG.NPC_HISTORY_COUNT);
+
+  const blocks: string[] = [];
+  if (past.length > 0) {
+    blocks.push(
+      [
+        '■ 前の回の会話（別の相手との会話。古い順）',
+        ...past.map(
+          (m) => `[第${m.setNo}回・${name(partnerOf(view.me.seat, m.setNo))}との会話] ${line(m)}`,
+        ),
+      ].join('\n'),
+    );
+  }
+  const partner = name(partnerOf(view.me.seat, view.setNo));
+  blocks.push(
+    current.length === 0
+      ? `■ ${partner}との会話\n（まだ発言はありません）`
+      : [`■ ${partner}との会話（古い順）`, ...current.map(line)].join('\n'),
+  );
+  return blocks.join('\n\n');
 }
 
 /** シナリオと自キャラの共通部分。 */
@@ -82,10 +101,11 @@ function context(view: RoomView): string {
 }
 
 export function talkPrompt(view: RoomView): string {
-  const me = view.seats[view.me.seat]!.name;
+  const name = (seat: number) => view.seats[seat]!.name;
+  const me = name(view.me.seat);
   return [
     context(view),
-    `■ 今回の指示\nいまは自由に会話する時間です（第${view.setNo}回）。${me}として、次の発言を1つだけ出力してください。`,
+    `■ 今回の指示\nいまは${name(partnerOf(view.me.seat, view.setNo))}と2人で会話する時間です（第${view.setNo}回）。他の人にはこの会話は聞こえません。${me}として、次の発言を1つだけ出力してください。`,
     `出力形式：JSONのみ。例 {"say": "……"}（${CONFIG.NPC_MAX_CHARS}文字以内）`,
   ].join('\n\n');
 }

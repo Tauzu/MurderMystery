@@ -224,7 +224,7 @@ function PhaseMain({
     case 'VOTE':
       return <Vote socket={socket} view={view} disabled={disabled} />;
     default:
-      return <Result view={view} nameOf={nameOf} />;
+      return <Result socket={socket} view={view} nameOf={nameOf} disabled={disabled} />;
   }
 }
 
@@ -294,6 +294,80 @@ function RevealPick({
   );
 }
 
+type ChatMessage = RoomView['chat'][number];
+
+function ChatLog({
+  messages,
+  nameOf,
+  empty,
+}: {
+  messages: ChatMessage[];
+  nameOf: (seat: number) => string;
+  empty: string;
+}) {
+  const bottom = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    bottom.current?.scrollIntoView({ block: 'end' });
+  }, [messages.length]);
+
+  return (
+    <div className="chat">
+      {messages.length === 0 && <p className="muted">{empty}</p>}
+      {messages.map((m) => (
+        <p key={m.id}>
+          <span className="who">{nameOf(m.seat)}</span>
+          {m.body}
+        </p>
+      ))}
+      <div ref={bottom} />
+    </div>
+  );
+}
+
+function ChatInput({
+  socket,
+  disabled,
+  children,
+}: {
+  socket: GameSocket;
+  disabled: boolean;
+  children?: React.ReactNode;
+}) {
+  const [text, setText] = useState('');
+
+  const send = () => {
+    const body = text.trim();
+    if (!body || disabled) return;
+    socket.send({ type: 'chat', body });
+    setText('');
+  };
+
+  return (
+    <div className="row">
+      <input
+        type="text"
+        value={text}
+        maxLength={200}
+        placeholder="発言を入力（Enterで送信）"
+        disabled={disabled}
+        onChange={(e) => setText(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && !e.nativeEvent.isComposing) send();
+        }}
+        style={{ flex: 1, minWidth: 200 }}
+      />
+      <button disabled={disabled || !text.trim()} onClick={send}>
+        送信
+      </button>
+      {children}
+    </div>
+  );
+}
+
+/** 席 seat のセット setNo での会話相手。サーバー（game-core の partnerOf）と同じ規則。 */
+const partnerOf = (seat: number, setNo: number) => seat ^ setNo;
+
 function Talk({
   socket,
   view,
@@ -305,52 +379,17 @@ function Talk({
   nameOf: (seat: number) => string;
   disabled: boolean;
 }) {
-  const [text, setText] = useState('');
-  const bottom = useRef<HTMLDivElement>(null);
-  const messages = view.chat;
   const agreed = view.agreedEndSeats.includes(view.me.seat);
-
-  useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
-  }, [messages.length]);
-
-  const send = () => {
-    const body = text.trim();
-    if (!body || disabled) return;
-    socket.send({ type: 'chat', body });
-    setText('');
-  };
+  const partner = partnerOf(view.me.seat, view.setNo);
+  const current = view.chat.filter((m) => m.scope === 'pair' && m.setNo === view.setNo);
+  const past = view.chat.filter((m) => m.scope === 'pair' && m.setNo < view.setNo);
 
   return (
     <div className="panel">
-      <h2>推理と会話</h2>
-      <div className="chat">
-        {messages.length === 0 && <p className="muted">まだ発言がありません。</p>}
-        {messages.map((m) => (
-          <p key={m.id}>
-            <span className="who">{nameOf(m.seat)}</span>
-            {m.body}
-            {m.setNo !== view.setNo && <span className="badge">第{m.setNo}セット</span>}
-          </p>
-        ))}
-        <div ref={bottom} />
-      </div>
-      <div className="row">
-        <input
-          type="text"
-          value={text}
-          maxLength={200}
-          placeholder="発言を入力（Enterで送信）"
-          disabled={disabled}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.nativeEvent.isComposing) send();
-          }}
-          style={{ flex: 1, minWidth: 200 }}
-        />
-        <button disabled={disabled || !text.trim()} onClick={send}>
-          送信
-        </button>
+      <h2>{nameOf(partner)}さんと2人で会話</h2>
+      <p className="muted">この会話は、あなたと{nameOf(partner)}さんにしか見えません。</p>
+      <ChatLog messages={current} nameOf={nameOf} empty="まだ発言がありません。" />
+      <ChatInput socket={socket} disabled={disabled}>
         <button
           className="secondary"
           disabled={disabled || agreed}
@@ -358,8 +397,21 @@ function Talk({
         >
           {agreed ? '他の人を待っています…' : '話し終えた'}
         </button>
-      </div>
+      </ChatInput>
       <p className="muted">全員が「話し終えた」を押すと、時間前でも次へ進みます。</p>
+      {past.length > 0 && (
+        <details>
+          <summary>前の回の会話を見る</summary>
+          {[...new Set(past.map((m) => m.setNo))].map((setNo) => (
+            <div key={setNo}>
+              <h3>
+                第{setNo}セット：{nameOf(partnerOf(view.me.seat, setNo))}さんとの会話
+              </h3>
+              <ChatLog messages={past.filter((m) => m.setNo === setNo)} nameOf={nameOf} empty="" />
+            </div>
+          ))}
+        </details>
+      )}
     </div>
   );
 }
@@ -409,7 +461,17 @@ function Vote({
   );
 }
 
-function Result({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => string }) {
+function Result({
+  socket,
+  view,
+  nameOf,
+  disabled,
+}: {
+  socket: GameSocket;
+  view: RoomView;
+  nameOf: (seat: number) => string;
+  disabled: boolean;
+}) {
   const r = view.resultView;
   if (!r) return <p className="muted">結果を待っています…</p>;
   const culprit = r.result.culpritSeat;
@@ -469,6 +531,49 @@ function Result({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => st
               ))}
             </div>
           </div>
+        ))}
+      </div>
+
+      <div className="panel">
+        <h2>感想戦</h2>
+        <p className="muted">全員で話せます。NPCは発言しません。</p>
+        <ChatLog
+          messages={view.chat.filter((m) => m.scope === 'all')}
+          nameOf={nameOf}
+          empty="まだ発言がありません。"
+        />
+        <ChatInput socket={socket} disabled={disabled || view.phase !== 'RESULT'} />
+      </div>
+
+      <div className="panel">
+        <h2>各組の会話</h2>
+        <p className="muted">プレイ中は、自分の組の会話しか見えませんでした。</p>
+        {[1, 2, 3].map((setNo) => (
+          <details key={setNo}>
+            <summary>第{setNo}セット</summary>
+            {view.seats
+              .filter((s) => s.seat < partnerOf(s.seat, setNo))
+              .map((s) => {
+                const other = partnerOf(s.seat, setNo);
+                return (
+                  <div key={s.seat}>
+                    <h3>
+                      {nameOf(s.seat)} と {nameOf(other)}
+                    </h3>
+                    <ChatLog
+                      messages={view.chat.filter(
+                        (m) =>
+                          m.scope === 'pair' &&
+                          m.setNo === setNo &&
+                          (m.seat === s.seat || m.seat === other),
+                      )}
+                      nameOf={nameOf}
+                      empty="発言はありませんでした。"
+                    />
+                  </div>
+                );
+              })}
+          </details>
         ))}
       </div>
 

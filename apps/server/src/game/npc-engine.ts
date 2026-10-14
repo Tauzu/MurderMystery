@@ -92,7 +92,9 @@ export class NpcEngine {
     if (now < schedule.at) return;
 
     // 直前に誰かが話していたら、重ならないように少しずらす（設計書 §8.2）
-    const last = state.chat[state.chat.length - 1];
+    const last = view()
+      .chat.filter((m) => m.setNo === state.setNo)
+      .at(-1);
     if (last && now - last.at < CONFIG.NPC_TALK_COLLISION_SEC * 1000) {
       schedule.at = now + CONFIG.NPC_TALK_COLLISION_SEC * 1000;
       return;
