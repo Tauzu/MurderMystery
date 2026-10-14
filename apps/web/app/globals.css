@@ -253,3 +253,24 @@ ul.plain li {
 ul.plain li:last-child {
   border-bottom: 0;
 }
+
+.fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.group h3 {
+  margin: 12px 0 6px;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+
+.card.compact {
+  margin-bottom: 6px;
+  padding: 8px 10px;
+}
+
+.card.latest {
+  border-color: var(--accent);
+}

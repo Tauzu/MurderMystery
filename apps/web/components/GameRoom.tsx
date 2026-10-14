@@ -44,6 +44,7 @@ export function GameRoom({ roomId }: { roomId: string }) {
       <Banners socket={socket} />
       <div className="layout">
         <aside>
+          <IntroPanel view={view} />
           <MyPanel view={view} />
         </aside>
         <section>
@@ -101,6 +102,21 @@ function Banners({ socket }: { socket: GameSocket }) {
   );
 }
 
+/** 冒頭文。あとから読み返せるよう、折りたたんで常に置いておく（被害者の名前などを確認するため）。 */
+function IntroPanel({ view }: { view: RoomView }) {
+  if (view.phase === 'INTRO') return null; // 導入では本文を主画面に出している
+  return (
+    <details
+      className="panel fold"
+      key={view.phase === 'CONFIRM' ? 'open' : 'closed'}
+      open={view.phase === 'CONFIRM'}
+    >
+      <summary>事件の発端（冒頭文）</summary>
+      <p className="prose">{view.introText}</p>
+    </details>
+  );
+}
+
 /** 自分のキャラクター・状況文・手札。 */
 function MyPanel({ view }: { view: RoomView }) {
   const me = view.seats.find((s) => s.seat === view.me.seat)!;
@@ -112,8 +128,14 @@ function MyPanel({ view }: { view: RoomView }) {
           <strong>あなたが犯人です。</strong>正体を隠し通してください。
         </p>
       )}
-      <h3>状況</h3>
-      <p className="prose">{view.me.situationText}</p>
+      <details
+        className="fold"
+        key={view.phase === 'CONFIRM' ? 'open' : 'closed'}
+        open={view.phase === 'CONFIRM'}
+      >
+        <summary>自分の状況（クリックで開く）</summary>
+        <p className="prose">{view.me.situationText}</p>
+      </details>
       <h3>手札</h3>
       <div style={{ display: 'grid', gap: 8 }}>
         {view.me.cards.map((c) => (
@@ -167,23 +189,47 @@ function SeatsPanel({ view }: { view: RoomView }) {
 }
 
 function RevealedPanel({ view, nameOf }: { view: RoomView; nameOf: (seat: number) => string }) {
+  const [byPerson, setByPerson] = useState(true);
+  const groups = byPerson
+    ? view.seats.map((seat) => ({
+        key: String(seat.seat),
+        title: seat.name,
+        items: view.revealed.filter((r) => r.seat === seat.seat),
+      }))
+    : [1, 2, 3].map((setNo) => ({
+        key: String(setNo),
+        title: `第${setNo}セット`,
+        items: view.revealed.filter((r) => r.setNo === setNo),
+      }));
+
   return (
     <div className="panel">
-      <h2>公開されたカード</h2>
+      <div className="row spread">
+        <h2>公開されたカード</h2>
+        <button className="secondary" onClick={() => setByPerson(!byPerson)}>
+          {byPerson ? 'セット順で見る' : '人物別で見る'}
+        </button>
+      </div>
       {view.revealed.length === 0 && <p className="muted">まだ公開されていません。</p>}
-      <div style={{ display: 'grid', gap: 8 }}>
-        {view.revealed.map((r) => (
-          <div key={r.card.id} className="card">
-            <h4>
-              {r.card.title}
-              <span className="badge">
-                第{r.setNo}セット・{nameOf(r.seat)}
-              </span>
-            </h4>
-            <div className="prose">{r.card.body}</div>
+      {groups
+        .filter((g) => g.items.length > 0)
+        .map((g) => (
+          <div key={g.key} className="group">
+            <h3>{g.title}</h3>
+            {g.items.map((r) => (
+              <div
+                key={r.card.id}
+                className={`card compact ${r.setNo === view.setNo ? 'latest' : ''}`}
+              >
+                <h4>
+                  {r.card.title}
+                  <span className="badge">{byPerson ? `第${r.setNo}セット` : nameOf(r.seat)}</span>
+                </h4>
+                <div className="prose">{r.card.body}</div>
+              </div>
+            ))}
           </div>
         ))}
-      </div>
     </div>
   );
 }
