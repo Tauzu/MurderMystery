@@ -21,9 +21,37 @@ function phaseTitle(view: RoomView): string {
   return view.phase === 'REVEAL' || view.phase === 'TALK' ? `第${view.setNo}セット：${base}` : base;
 }
 
+/**
+ * 席が人間からNPCに切り替わったことを知らせる（仕様書 §7.4）。
+ * 状態の変化から検出するので、再接続の直後は通知しない。
+ */
+function useSwitchNotices(view: RoomView | null): string[] {
+  const previous = useRef<Map<number, string> | null>(null);
+  const [notices, setNotices] = useState<{ id: number; text: string }[]>([]);
+  const nextId = useRef(0);
+
+  useEffect(() => {
+    if (!view) return;
+    const kinds = new Map(view.seats.map((s) => [s.seat, s.kind]));
+    const before = previous.current;
+    previous.current = kinds;
+    if (!before) return;
+    for (const seat of view.seats) {
+      if (before.get(seat.seat) === 'human' && seat.kind === 'npc') {
+        const id = nextId.current++;
+        setNotices((list) => [...list, { id, text: `${seat.name}が NPC に切り替わりました` }]);
+        setTimeout(() => setNotices((list) => list.filter((n) => n.id !== id)), 15000);
+      }
+    }
+  }, [view]);
+
+  return notices.map((n) => n.text);
+}
+
 export function GameRoom({ roomId }: { roomId: string }) {
   const socket = useGameSocket(roomId);
   const { view, connection, closeReason } = socket;
+  const switchNotices = useSwitchNotices(view);
 
   if (connection === 'closed') {
     return (
@@ -42,6 +70,11 @@ export function GameRoom({ roomId }: { roomId: string }) {
     <>
       <Header socket={socket} view={view} />
       <Banners socket={socket} />
+      {switchNotices.map((text, i) => (
+        <div key={i} className="banner">
+          {text}
+        </div>
+      ))}
       {view.phase === 'INTRO' || view.phase === 'CONFIRM' ? (
         // 冒頭文・状況文の初表示は、読むことに集中できるよう画面いっぱいに出す
         <div className={view.phase === 'CONFIRM' ? 'wide wider' : 'wide'}>
