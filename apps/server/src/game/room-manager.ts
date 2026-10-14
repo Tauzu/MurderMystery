@@ -207,6 +207,13 @@ export class RoomManager {
           'id' | 'scenarioId' | 'state' | 'seq' | 'participationIds' | 'recorded'
         >;
         if (this.rooms.has(saved.id) || saved.state.phase === 'CLOSED') continue;
+        // サーバーが止まっていた間を、無操作として数えない（開発中の自動再起動でも切り替わらないように）
+        for (const seat of saved.state.seats) {
+          if (seat.kind === 'human') {
+            seat.lastActiveAt = this.now();
+            seat.warned = false;
+          }
+        }
         this.rooms.set(saved.id, {
           ...saved,
           listeners: new Set(),
