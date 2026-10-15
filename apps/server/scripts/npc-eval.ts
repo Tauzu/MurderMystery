@@ -51,7 +51,13 @@ const scenario = {
     publicProfile: c.publicProfile,
     situationText: c.situationText,
     isCulprit: c.isCulprit,
-    cards: c.cards.map((card, k) => ({ id: `c${i}-k${k}`, title: card.title, body: card.body })),
+    cards: c.cards.map((card, k) => ({
+      id: `c${i}-k${k}`,
+      kind: card.kind,
+      title: card.title,
+      body: card.body,
+      isFabricated: card.isFabricated ?? false,
+    })),
   })),
 };
 
@@ -182,7 +188,10 @@ for (const m of state.chat) {
     const revealed = new Set(state.revealed.map((r) => r.cardId));
     const secrets = [
       other.situationText,
-      ...other.cards.filter((c) => !revealed.has(c.id)).map((c) => c.body),
+      ...other.cards
+        // 犯人は、他人の手札にある捏造カードを知っている（仕様書 §4.3.1）
+        .filter((c) => !revealed.has(c.id) && !(c.isFabricated && mine.isCulprit))
+        .map((c) => c.body),
     ];
     if (secrets.some((s) => windowHit(m.body, s)))
       problems.push(`他人の秘密に酷似: ${who}「${m.body}」`);

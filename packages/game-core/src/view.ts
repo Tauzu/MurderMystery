@@ -1,9 +1,11 @@
-import type { Phase } from '@mm/shared';
+import type { CardKind, Phase } from '@mm/shared';
 import { characterOf, partnerOf } from './reduce';
-import type { ChatMessage, GameResult, RoomState, SeatKind } from './types';
+import type { CardData, ChatMessage, GameResult, RoomState, SeatKind } from './types';
 
+/** カードの見える部分。捏造かどうかは含めない */
 export interface CardView {
   id: string;
+  kind: CardKind;
   title: string;
   body: string;
 }
@@ -26,7 +28,7 @@ export interface ResultView {
   result: GameResult;
   endingText: string;
   /** 全員の手札の開示（結果画面） */
-  hands: { seat: number; cards: (CardView & { revealed: boolean })[] }[];
+  hands: { seat: number; cards: (CardView & { revealed: boolean; fabricated: boolean })[] }[];
   votes: { seat: number; target: number | null }[];
 }
 
@@ -46,6 +48,11 @@ export interface RoomView {
     cards: (CardView & { revealed: boolean })[];
     /** 犯人かどうかは、自分についてのみ伝える */
     isCulprit: boolean;
+    /**
+     * どのカードが捏造か。犯人の席にだけ、最初から伝える（他人の手札にあっても）。
+     * 犯人以外は null（持ち主にも伝えない）。仕様書 §4.3.1
+     */
+    fabricatedCard: { seat: number; card: CardView } | null;
   };
   /** INTRO / CONFIRM で「次へ」を押した席 */
   readySeats: number[];
@@ -75,11 +82,20 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
   const showResult =
     state.phase === 'RESULT' || (state.phase === 'CLOSED' && state.result !== null);
 
-  const cardView = (c: { id: string; title: string; body: string }): CardView => ({
+  const cardView = (c: CardData): CardView => ({
     id: c.id,
+    kind: c.kind,
     title: c.title,
     body: c.body,
   });
+
+  let fabricatedCard: RoomView['me']['fabricatedCard'] = null;
+  if (me.isCulprit) {
+    for (const s of state.seats) {
+      const card = characterOf(state, s).cards.find((c) => c.isFabricated);
+      if (card) fabricatedCard = { seat: s.index, card: cardView(card) };
+    }
+  }
 
   const revealed: RevealedCardView[] = state.revealed.map((r) => {
     const seat = state.seats[r.seat]!;
@@ -109,6 +125,7 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
       situationText: me.situationText,
       cards: me.cards.map((c) => ({ ...cardView(c), revealed: revealedIds.has(c.id) })),
       isCulprit: me.isCulprit,
+      fabricatedCard,
     },
     readySeats: [...state.ready],
     pickedSeats: Object.keys(state.picks).map(Number),
@@ -136,6 +153,7 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
               cards: characterOf(state, s).cards.map((c) => ({
                 ...cardView(c),
                 revealed: revealedIds.has(c.id),
+                fabricated: c.isFabricated,
               })),
             })),
             votes: state.seats.map((s) => ({
