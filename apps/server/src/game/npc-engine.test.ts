@@ -79,6 +79,8 @@ beforeAll(async () => {
 afterAll(async () => {
   managers.forEach((m) => m.shutdown());
   await db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await redis.del(`room:${id}:state`);
   await cleanupTestUsers(db);
   await db.$disconnect();
   redis.disconnect();

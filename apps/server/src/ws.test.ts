@@ -143,6 +143,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await t.db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await t.redis.del(`room:${id}:state`);
   await cleanupTestUsers(t.db);
   await t.close();
 });

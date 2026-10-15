@@ -213,6 +213,15 @@ export class RoomManager {
           'id' | 'scenarioId' | 'state' | 'seq' | 'participationIds' | 'recorded'
         >;
         if (this.rooms.has(saved.id) || saved.state.phase === 'CLOSED') continue;
+        // 対戦記録が無い（開発DBの作り直しやテストの後片付けで消えた）ものは、続けられないので捨てる
+        const game = await this.opts.db.game.findUnique({
+          where: { id: saved.id },
+          select: { id: true },
+        });
+        if (!game) {
+          await redis.del(key);
+          continue;
+        }
         // サーバーが止まっていた間を、無操作として数えない（開発中の自動再起動でも切り替わらないように）
         for (const seat of saved.state.seats) {
           if (seat.kind === 'human') {

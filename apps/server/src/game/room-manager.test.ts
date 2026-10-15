@@ -47,6 +47,8 @@ beforeAll(async () => {
 afterAll(async () => {
   manager.shutdown();
   await db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await redis.del(`room:${id}:state`);
   await cleanupTestUsers(db);
   await db.$disconnect();
   redis.disconnect();
@@ -255,6 +257,17 @@ describe('RoomManager：古い形式の保存状態の復元', () => {
     expect(state.typing).toEqual([]);
     expect(state.scenario.victim).toBeNull();
     await restarted.tickAll(); // 例外にならない
+    restarted.shutdown();
+  });
+
+  it('対戦記録がDBに無いルームは復元せず、捨てる', async () => {
+    const { roomId } = await startGame(4);
+    await db.game.delete({ where: { id: roomId } });
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    expect(restarted.getState(roomId)).toBeNull();
+    expect(await redis.get(keyOf(roomId))).toBeNull();
     restarted.shutdown();
   });
 
