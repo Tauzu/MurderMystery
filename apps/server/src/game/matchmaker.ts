@@ -25,6 +25,8 @@ interface QueueEntry {
   scenarioId: string;
   size: number;
   enqueuedAt: number;
+  /** 待機画面が最後に状況を確認した時刻（ブラウザを閉じた人を外すため） */
+  lastSeenAt: number;
 }
 
 /**
@@ -83,7 +85,7 @@ export class Matchmaker {
 
     const key = this.key(scenarioId, size);
     const queue = this.queues.get(key) ?? [];
-    queue.push({ userId, scenarioId, size, enqueuedAt: this.now() });
+    queue.push({ userId, scenarioId, size, enqueuedAt: this.now(), lastSeenAt: this.now() });
     this.queues.set(key, queue);
 
     if (queue.length >= size) await this.launch(key, size);
@@ -121,6 +123,7 @@ export class Matchmaker {
 
   /** 1秒ごとに呼ぶ。待機が上限に達した待機列を、不足分をNPCで補って開始する。 */
   async tick(): Promise<void> {
+    this.dropStale();
     const limitMs = CONFIG.MATCH_WAIT_SEC * 1000;
     for (const [key, q] of [...this.queues]) {
       if (q.length > 0 && this.now() - q[0]!.enqueuedAt >= limitMs) {
@@ -135,6 +138,17 @@ export class Matchmaker {
       ...Array.from({ length: SEAT_COUNT - members.length }, () => ({ kind: 'npc' as const })),
     ];
     await this.rooms.createRoom(scenarioId, participants);
+  }
+
+  /** 待機画面からの確認が途絶えた人（ブラウザを閉じた人など）を待機列から外す。 */
+  private dropStale() {
+    const staleMs = CONFIG.MATCH_STALE_SEC * 1000;
+    for (const [key, q] of [...this.queues]) {
+      const alive = q.filter((e) => this.now() - e.lastSeenAt <= staleMs);
+      if (alive.length === q.length) continue;
+      if (alive.length === 0) this.queues.delete(key);
+      else this.queues.set(key, alive);
+    }
   }
 
   cancel(userId: string): boolean {
@@ -155,6 +169,7 @@ export class Matchmaker {
     const entry = this.findEntry(userId);
     if (this.starting.has(userId)) return { status: 'starting' };
     if (entry) {
+      entry.lastSeenAt = this.now();
       const queue = this.queues.get(this.key(entry.scenarioId, entry.size)) ?? [];
       const elapsedMs = this.now() - (queue[0]?.enqueuedAt ?? entry.enqueuedAt);
       return {

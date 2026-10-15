@@ -14,6 +14,13 @@ const redis = new Redis(env.redisUrl);
 
 let clock = 1_800_000_000_000;
 const advance = (sec: number) => (clock += sec * 1000);
+/** 待機画面を開いたまま時間が過ぎる（画面は数秒おきに状況を確認する） */
+function pass(sec: number, ...userIds: string[]) {
+  for (let left = sec; left > 0; left -= 5) {
+    advance(Math.min(5, left));
+    userIds.forEach((id) => matchmaker.status(id));
+  }
+}
 const rooms = new RoomManager({ db, redis, now: () => clock });
 const matchmaker = new Matchmaker(db, rooms, { now: () => clock });
 
@@ -59,11 +66,11 @@ describe('Matchmaker：待機のタイムアウトと今すぐ開始', () => {
       remainingSec: CONFIG.MATCH_WAIT_SEC,
     });
 
-    advance(CONFIG.MATCH_WAIT_SEC - 10);
+    pass(CONFIG.MATCH_WAIT_SEC - 10, a, b);
     await matchmaker.tick();
     expect(matchmaker.status(a)).toMatchObject({ status: 'waiting', remainingSec: 10 });
 
-    advance(10);
+    pass(10, a, b);
     await matchmaker.tick();
     const state = roomOf(a);
     expect(
@@ -78,7 +85,7 @@ describe('Matchmaker：待機のタイムアウトと今すぐ開始', () => {
 
   it('待機が上限未満なら、tick しても開始しない', async () => {
     const a = await waitingUser(3);
-    advance(CONFIG.MATCH_WAIT_SEC - 1);
+    pass(CONFIG.MATCH_WAIT_SEC - 1, a);
     await matchmaker.tick();
     expect(matchmaker.status(a).status).toBe('waiting');
     matchmaker.cancel(a);
@@ -98,13 +105,32 @@ describe('Matchmaker：待機のタイムアウトと今すぐ開始', () => {
     expect(matchmaker.status(userId).status).toBe('none');
   });
 
+  it('待機画面からの確認が途絶えた人は、待機列から外れる', async () => {
+    const gone = await waitingUser(4);
+    const staying = await waitingUser(4);
+    advance(CONFIG.MATCH_STALE_SEC - 1);
+    matchmaker.status(staying); // こちらは画面を開いたまま
+    advance(2);
+    await matchmaker.tick();
+    expect(matchmaker.status(gone).status).toBe('none');
+    expect(matchmaker.status(staying)).toMatchObject({ status: 'waiting', waiting: 1 });
+    matchmaker.cancel(staying);
+  });
+
+  it('確認が途絶えた人は、待機が上限に達してもゲームに入れられない', async () => {
+    const gone = await waitingUser(4);
+    advance(CONFIG.MATCH_WAIT_SEC);
+    await matchmaker.tick();
+    expect(matchmaker.status(gone).status).toBe('none');
+  });
+
   it('別の人数指定の待機列は、タイムアウトの影響を受けない', async () => {
     const a = await waitingUser(4);
-    advance(CONFIG.MATCH_WAIT_SEC - 5);
+    pass(CONFIG.MATCH_WAIT_SEC - 5, a);
     const b = await waitingUser(3); // こちらは待ち始めたばかり
     await matchmaker.tick();
     expect(matchmaker.status(b).status).toBe('waiting');
-    advance(5);
+    pass(5, a, b);
     await matchmaker.tick();
     expect(matchmaker.status(a).status).toBe('matched');
     expect(matchmaker.status(b)).toMatchObject({
