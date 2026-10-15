@@ -239,6 +239,39 @@ describe('RoomManager：再起動からの復元', () => {
   });
 });
 
+describe('RoomManager：古い形式の保存状態の復元', () => {
+  const keyOf = (id: string) => `room:${id}:state`;
+
+  it('後から増えた項目が無い状態でも、補って復元できる', async () => {
+    const { roomId } = await startGame(4);
+    const saved = JSON.parse((await redis.get(keyOf(roomId)))!);
+    delete saved.state.typing;
+    delete saved.state.scenario.victim;
+    await redis.set(keyOf(roomId), JSON.stringify(saved));
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    const state = restarted.getState(roomId)!.state;
+    expect(state.typing).toEqual([]);
+    expect(state.scenario.victim).toBeNull();
+    await restarted.tickAll(); // 例外にならない
+    restarted.shutdown();
+  });
+
+  it('読めない保存状態は復元せず、捨てる', async () => {
+    const { roomId } = await startGame(4);
+    const saved = JSON.parse((await redis.get(keyOf(roomId)))!);
+    saved.state.scenario.characters = []; // 席のキャラクターが見つからない形式
+    await redis.set(keyOf(roomId), JSON.stringify(saved));
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    expect(restarted.getState(roomId)).toBeNull();
+    expect(await redis.get(keyOf(roomId))).toBeNull();
+    restarted.shutdown();
+  });
+});
+
 describe('RoomManager：復元と無操作', () => {
   it('サーバーが止まっていた間は、無操作として数えない', async () => {
     const { roomId } = await startGame(4);

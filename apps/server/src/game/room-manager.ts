@@ -1,6 +1,7 @@
 import {
   characterOf,
   createRoom,
+  projectView,
   reduce,
   type Effect,
   type Participant,
@@ -145,7 +146,12 @@ export class RoomManager {
   }
 
   async tickAll(): Promise<void> {
-    await Promise.all([...this.rooms.keys()].map((id) => this.tickRoom(id)));
+    // 1つのルームの異常で、他のルームやサーバー全体が止まらないようにする
+    await Promise.all(
+      [...this.rooms.keys()].map((id) =>
+        this.tickRoom(id).catch((e) => console.error(`ルーム ${id} の処理に失敗`, e)),
+      ),
+    );
   }
 
   private async tickRoom(id: string): Promise<void> {
@@ -213,6 +219,17 @@ export class RoomManager {
             seat.lastActiveAt = this.now();
             seat.warned = false;
           }
+        }
+        // 古い版で保存された状態に、後から増えた項目を補う。補っても読めないものは捨てる
+        const st = saved.state;
+        st.typing ??= [];
+        st.scenario.victim ??= null;
+        for (const m of st.chat) m.scope ??= 'pair';
+        try {
+          for (const seat of st.seats) projectView(st, seat.index, this.now());
+        } catch {
+          await redis.del(key);
+          continue;
         }
         this.rooms.set(saved.id, {
           ...saved,
