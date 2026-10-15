@@ -187,7 +187,11 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
       expect(prompt).toBeDefined();
       for (const other of state.scenario.characters.filter((c) => c.id !== own.id)) {
         expect(prompt).not.toContain(other.situationText);
-        for (const card of other.cards) expect(prompt).not.toContain(card.body);
+        for (const card of other.cards) {
+          // 犯人は、他人の手札にある捏造カードを知っている（仕様書 §4.3.1）
+          if (card.isFabricated && own.isCulprit) continue;
+          expect(prompt).not.toContain(card.body);
+        }
       }
     }
   });

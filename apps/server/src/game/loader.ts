@@ -29,7 +29,13 @@ export async function loadScenarioData(db: Db, scenarioId: string): Promise<Load
         publicProfile: c.publicProfile,
         situationText: c.situationText,
         isCulprit: c.isCulprit,
-        cards: c.cards.map((card) => ({ id: card.id, title: card.title, body: card.body })),
+        cards: c.cards.map((card) => ({
+          id: card.id,
+          kind: card.kind,
+          title: card.title,
+          body: card.body,
+          isFabricated: card.isFabricated,
+        })),
       })),
     },
   };

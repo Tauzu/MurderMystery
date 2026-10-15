@@ -12,6 +12,12 @@ enum UserStatus {
   suspended
 }
 
+/// カードの種類（仕様書 §4.3.1）
+enum CardKind {
+  testimony
+  item
+}
+
 enum ScenarioStatus {
   draft
   published
@@ -81,11 +87,14 @@ model Character {
 }
 
 model Card {
-  id          String @id @default(uuid()) @db.Uuid
-  characterId String @map("character_id") @db.Uuid
-  slot        Int    @db.SmallInt
-  title       String
-  body        String
+  id           String   @id @default(uuid()) @db.Uuid
+  characterId  String   @map("character_id") @db.Uuid
+  slot         Int      @db.SmallInt
+  kind         CardKind
+  title        String
+  body         String
+  /// 捏造カード。シナリオにつき1枚（アプリ層で保証）
+  isFabricated Boolean  @default(false) @map("is_fabricated")
 
   character Character      @relation(fields: [characterId], references: [id], onDelete: Cascade)
   revealed  RevealedCard[]

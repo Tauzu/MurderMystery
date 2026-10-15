@@ -16,7 +16,10 @@ export function seededRng(seed: number): () => number {
 
 const NAMES = ['A', 'B', 'C', 'D'];
 
-/** 4キャラ×4枚。文言はキャラごとに一意で、漏洩の検査に使う。C（index 2）が犯人。 */
+/**
+ * 4キャラ×4枚（目撃証言2枚・証拠品2枚）。文言はキャラごとに一意で、漏洩の検査に使う。
+ * C（index 2）が犯人。捏造カードは探偵側 A の4枚目（card-A4）。
+ */
 export function fixtureScenario(): ScenarioData {
   return {
     introText: 'INTRO-TEXT',
@@ -30,8 +33,10 @@ export function fixtureScenario(): ScenarioData {
       isCulprit: i === 2,
       cards: [1, 2, 3, 4].map((k) => ({
         id: `card-${n}${k}`,
+        kind: k <= 2 ? ('testimony' as const) : ('item' as const),
         title: `TITLE-${n}${k}`,
         body: `SECRET-CARD-BODY-${n}${k}`,
+        isFabricated: n === 'A' && k === 4,
       })),
     })),
   };

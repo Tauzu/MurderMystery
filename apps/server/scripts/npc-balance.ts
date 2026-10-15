@@ -68,7 +68,13 @@ const scenario = {
     publicProfile: c.publicProfile,
     situationText: c.situationText,
     isCulprit: c.isCulprit,
-    cards: c.cards.map((card, k) => ({ id: `c${i}-k${k}`, title: card.title, body: card.body })),
+    cards: c.cards.map((card, k) => ({
+      id: `c${i}-k${k}`,
+      kind: card.kind,
+      title: card.title,
+      body: card.body,
+      isFabricated: card.isFabricated ?? false,
+    })),
   })),
 };
 

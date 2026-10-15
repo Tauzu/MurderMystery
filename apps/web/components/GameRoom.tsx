@@ -1,6 +1,7 @@
 'use client';
 
 import type { RoomView } from '@mm/game-core';
+import { CARD_KIND_LABELS, type CardKind } from '@mm/shared';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { formatClock, secondsLeft } from '../lib/time';
@@ -166,6 +167,17 @@ function IntroPanel({ view }: { view: RoomView }) {
   );
 }
 
+/** カードの種類（目撃証言／証拠品）。仕様書 §4.3.1 */
+function KindLabel({ kind }: { kind: CardKind }) {
+  return <span className={`kind ${kind}`}>{CARD_KIND_LABELS[kind]}</span>;
+}
+
+/** 犯人の画面でだけ、捏造カードに印を付ける。 */
+function FabricatedBadge({ view, cardId }: { view: RoomView; cardId: string }) {
+  if (view.me.fabricatedCard?.card.id !== cardId) return null;
+  return <span className="badge danger">捏造</span>;
+}
+
 function HandCards({ view }: { view: RoomView }) {
   return (
     <>
@@ -174,8 +186,10 @@ function HandCards({ view }: { view: RoomView }) {
         {view.me.cards.map((c) => (
           <div key={c.id} className={`card ${c.revealed ? 'revealed' : ''}`}>
             <h4>
+              <KindLabel kind={c.kind} />
               {c.title}
               {c.revealed && <span className="badge">公開済み</span>}
+              <FabricatedBadge view={view} cardId={c.id} />
             </h4>
             <div className="prose">{c.body}</div>
           </div>
@@ -187,10 +201,34 @@ function HandCards({ view }: { view: RoomView }) {
 
 function CulpritNotice({ view }: { view: RoomView }) {
   if (!view.me.isCulprit) return null;
+  const f = view.me.fabricatedCard;
+  const holder = f && view.seats.find((s) => s.seat === f.seat)?.name;
   return (
-    <p className="error">
-      <strong>あなたが犯人です。</strong>正体を隠し通してください。
-    </p>
+    <>
+      <p className="error">
+        <strong>あなたが犯人です。</strong>正体を隠し通してください。
+      </p>
+      {f && f.seat === view.me.seat && (
+        <p className="muted">
+          手札の「{f.card.title}」は、あなたが作った<strong>捏造カード</strong>
+          です。出すかどうか、いつ出すかはあなたが決められます。
+        </p>
+      )}
+      {f && f.seat !== view.me.seat && (
+        <div className="card compact">
+          <h4>
+            <KindLabel kind={f.card.kind} />
+            {f.card.title}
+            <span className="badge danger">捏造</span>
+          </h4>
+          <div className="prose">{f.card.body}</div>
+          <p className="muted">
+            {holder}の手札にある、あなたが仕込んだ<strong>捏造カード</strong>
+            です。{holder}本人は真実だと信じています。
+          </p>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -302,6 +340,9 @@ function RevealedPanel({ view, nameOf }: { view: RoomView; nameOf: (seat: number
           {byPerson ? 'セット順で見る' : '人物別で見る'}
         </button>
       </div>
+      <p className="muted">
+        カードは原則として事実ですが、全16枚のうち1枚だけ捏造カードがあります。
+      </p>
       {view.revealed.length === 0 && <p className="muted">まだ公開されていません。</p>}
       {groups
         .filter((g) => g.items.length > 0)
@@ -314,8 +355,10 @@ function RevealedPanel({ view, nameOf }: { view: RoomView; nameOf: (seat: number
                 className={`card compact ${r.setNo === view.setNo ? 'latest' : ''}`}
               >
                 <h4>
+                  <KindLabel kind={r.card.kind} />
                   {r.card.title}
                   <span className="badge">{byPerson ? `第${r.setNo}セット` : nameOf(r.seat)}</span>
+                  <FabricatedBadge view={view} cardId={r.card.id} />
                 </h4>
                 <div className="prose">{r.card.body}</div>
               </div>
@@ -397,7 +440,7 @@ function RevealPick({
     <div className="panel">
       <h2>公開するカードを1枚選んでください</h2>
       <p className="muted">
-        全員が選ぶか時間切れになると、4枚が同時に公開されます。公開したカードの内容は、全員にとっての事実になります。
+        全員が選ぶか時間切れになると、4枚が同時に公開されます。カードは原則として事実ですが、全16枚のうち1枚だけ捏造カードがあります。
       </p>
       <div className="cards" style={{ marginBottom: 12 }}>
         {available.map((c) => {
@@ -408,7 +451,11 @@ function RevealPick({
               className={`card selectable ${chosen ? 'selected' : ''}`}
               onClick={() => !done && !disabled && setSelected(c.id)}
             >
-              <h4>{c.title}</h4>
+              <h4>
+                <KindLabel kind={c.kind} />
+                {c.title}
+                <FabricatedBadge view={view} cardId={c.id} />
+              </h4>
               <div className="prose">{c.body}</div>
             </div>
           );
@@ -653,8 +700,10 @@ function Result({
               {h.cards.map((c) => (
                 <div key={c.id} className={`card ${c.revealed ? 'revealed' : ''}`}>
                   <h4>
+                    <KindLabel kind={c.kind} />
                     {c.title}
                     {!c.revealed && <span className="badge npc">未公開</span>}
+                    {c.fabricated && <span className="badge danger">捏造</span>}
                   </h4>
                   <div className="prose">{c.body}</div>
                 </div>

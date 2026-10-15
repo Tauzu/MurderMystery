@@ -66,12 +66,52 @@ describe('プロンプト：知り得る情報だけを含む', () => {
           expect(text).toContain(`SECRET-SITUATION-${n}`);
         } else {
           expect(text).not.toContain(`SECRET-SITUATION-${n}`);
-          expect(text).not.toContain(`SECRET-CARD-BODY-${n}`);
+          for (const k of [1, 2, 3, 4]) {
+            // 捏造カード（A4）だけは、犯人（席2）に見えてよい
+            if (view.me.isCulprit && `${n}${k}` === 'A4') continue;
+            expect(text).not.toContain(`SECRET-CARD-BODY-${n}${k}`);
+          }
           expect(text).toContain(`PROFILE-${n}`);
         }
       });
     });
   }
+
+  it('捏造カードは犯人のプロンプトにだけ入る。持ち主（席0）にも捏造とは伝えない', () => {
+    for (const seat of [0, 1, 2, 3]) {
+      const view = viewOf(seat);
+      const text = [talkPrompt(view), pickPrompt(view)].join('\n');
+      if (seat === 2) {
+        expect(text).toContain('名前Aの手札にある〈証拠品〉「TITLE-A4」：SECRET-CARD-BODY-A4');
+        expect(text).toContain('あなたが仕込んだ嘘');
+      } else {
+        expect(text).not.toContain('■ 捏造カード');
+        expect(text).not.toContain('【捏造カード】');
+      }
+    }
+    // 持ち主は、自分の手札として普通に見る
+    expect(talkPrompt(viewOf(0))).toContain(
+      '〈証拠品〉「TITLE-A4」（未公開）：SECRET-CARD-BODY-A4',
+    );
+  });
+
+  it('捏造カードが犯人の手札にあれば、手札に印が付き、公開の指示が入る', () => {
+    const state = orderedRoom();
+    for (const ch of state.scenario.characters) {
+      for (const card of ch.cards) card.isFabricated = card.id === 'card-C1';
+    }
+    state.phase = 'REVEAL';
+    const view = projectView(state, 2, T0);
+    expect(talkPrompt(view)).toContain('「TITLE-C1」（未公開）【捏造カード】');
+    expect(pickPrompt(view)).toContain('捏造カードは、疑いをそらすのに役立つ時点で出して');
+  });
+
+  it('全員に、捏造カードが1枚あるというルールが入る', () => {
+    expect(systemPrompt(true)).toContain('1枚だけが捏造カード');
+    expect(systemPrompt(false)).toContain('1枚だけが捏造カード');
+    expect(systemPrompt(true)).toContain('真実だと言い張って');
+    expect(systemPrompt(false)).toContain('あなた自身の手札も');
+  });
 
   it('犯人にだけ、隠す指示が入る', () => {
     expect(systemPrompt(true)).toContain('犯人であることを隠し通して');

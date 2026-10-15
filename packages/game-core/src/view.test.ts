@@ -11,6 +11,7 @@ function assertNoLeak(state: RoomState, viewer: number, label: string) {
   const json = JSON.stringify(projectView(state, viewer, T0));
   const showResult = state.phase === 'RESULT' || (state.phase === 'CLOSED' && state.result);
   const revealedIds = new Set(state.revealed.map((r) => r.cardId));
+  const viewerIsCulprit = characterOf(state, state.seats[viewer]!).isCulprit;
 
   for (const seat of SEATS) {
     if (seat === viewer) continue;
@@ -22,6 +23,8 @@ function assertNoLeak(state: RoomState, viewer: number, label: string) {
     );
     for (const card of ch.cards) {
       if (revealedIds.has(card.id) || showResult) continue;
+      // 捏造カードは、犯人には最初から見える（仕様書 §4.3.1）
+      if (card.isFabricated && viewerIsCulprit) continue;
       // 他の席の未公開の手札
       expect(json, `${label}: 席${viewer}に席${seat}の未公開カードが漏れている`).not.toContain(
         card.body,
@@ -32,6 +35,12 @@ function assertNoLeak(state: RoomState, viewer: number, label: string) {
     }
   }
   if (!showResult) {
+    // どのカードが捏造かは、犯人にしか伝えない
+    if (!viewerIsCulprit) {
+      expect(projectView(state, viewer, T0).me.fabricatedCard, `${label}: 席${viewer}`).toBeNull();
+    }
+    expect(json).not.toContain('"fabricated"');
+    expect(json).not.toContain('isFabricated');
     expect(json).not.toContain('ENDING-TEXT');
     expect(projectView(state, viewer, T0).resultView).toBeNull();
   }
@@ -123,6 +132,40 @@ describe('projectView（秘匿の保証）', () => {
     }
   });
 
+  it('捏造カードは、探偵側の手札にあっても犯人にだけ最初から分かる。持ち主には分からない', () => {
+    const s = newRoom();
+    const c = culpritSeat(s);
+    const holder = s.seats.find((seat) => seat.characterId === 'char-A')!.index;
+    for (const seat of SEATS) {
+      const v = projectView(s, seat, T0);
+      if (seat === c) {
+        expect(v.me.fabricatedCard).toEqual({
+          seat: holder,
+          card: { id: 'card-A4', kind: 'item', title: 'TITLE-A4', body: 'SECRET-CARD-BODY-A4' },
+        });
+      } else {
+        expect(v.me.fabricatedCard).toBeNull();
+      }
+    }
+    // 持ち主の手札にも、捏造の印は付かない
+    expect(Object.keys(projectView(s, holder, T0).me.cards[0]!).sort()).toEqual(
+      ['body', 'id', 'kind', 'revealed', 'title'].sort(),
+    );
+  });
+
+  it('捏造カードが犯人の手札にある場合も、犯人にだけ分かる', () => {
+    const s = newRoom();
+    for (const ch of s.scenario.characters) {
+      for (const card of ch.cards) card.isFabricated = ch.isCulprit && card.id.endsWith('1');
+    }
+    const c = culpritSeat(s);
+    for (const seat of SEATS) {
+      const v = projectView(s, seat, T0);
+      expect(v.me.fabricatedCard?.card.id ?? null).toBe(seat === c ? 'card-C1' : null);
+      if (seat === c) expect(v.me.fabricatedCard?.seat).toBe(c);
+    }
+  });
+
   it('自分が選択中のカードだけが myPick で分かる', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
     const card = characterOf(s, s.seats[0]!).cards[1]!;
@@ -152,6 +195,11 @@ describe('projectView（秘匿の保証）', () => {
     expect(v.resultView?.hands).toHaveLength(4);
     expect(v.resultView?.hands.flatMap((h) => h.cards)).toHaveLength(16);
     expect(v.resultView?.votes).toHaveLength(4);
+    // 結果では、どれが捏造だったかを全員に開示する
+    const fabricated = v.resultView?.hands
+      .flatMap((h) => h.cards)
+      .filter((card) => card.fabricated);
+    expect(fabricated?.map((card) => card.id)).toEqual(['card-A4']);
   });
 
   it('状態はJSONとして保存・復元でき、復元後も同じように動く', () => {
