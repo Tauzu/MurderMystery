@@ -12,6 +12,8 @@ export const CONFIG = {
   IDLE_SWITCH_SEC: 180,
   IDLE_WARN_SEC: 150,
   MATCH_WAIT_SEC: 90,
+  /** 待機画面からの確認がこの秒数なければ、ブラウザを閉じたとみなして待機列から外す */
+  MATCH_STALE_SEC: 15,
   REPORT_HIDE_THRESHOLD: 3,
   NPC_TALK_INTERVAL_SEC: [30, 60] as const,
   NPC_MAX_CHARS: 100,

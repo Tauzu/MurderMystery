@@ -171,6 +171,43 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     expect(state().chat.some((m) => m.seat === 1)).toBe(true);
   });
 
+  it('人間が全員いなくなって中断されたら、AIを呼ばず、次のゲームも始められる', async () => {
+    const { llm, calls } = fakeLlm();
+    const mgr = managerWith(llm);
+    const userId = await createTestUser(db);
+    const roomId = await mgr.createRoom(scenarioId, [
+      { kind: 'human', userId },
+      { kind: 'npc' },
+      { kind: 'npc' },
+      { kind: 'npc' },
+    ]);
+    gameIds.push(roomId);
+    managers.push(mgr);
+    const state = () => mgr.getState(roomId)!.state;
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
+    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.tickAll();
+    await settle();
+    await mgr.tickAll();
+    expect(state().phase).toBe('TALK');
+
+    // 唯一の人間が離脱 → 中断
+    await mgr.dispatch(roomId, { type: 'SwitchToNpc', seat: 0 });
+    expect(mgr.getState(roomId)).toBeNull(); // 中断されたルームは管理から外れる
+    expect(mgr.findRoomByUser(userId)).toBeNull(); // 次のゲームを始められる
+    expect((await db.game.findUniqueOrThrow({ where: { id: roomId } })).status).toBe('aborted');
+
+    const callsBefore = calls.length;
+    for (let i = 0; i < 3; i++) {
+      advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1);
+      await mgr.tickAll();
+      await settle();
+    }
+    expect(calls.length).toBe(callsBefore);
+  });
+
   it('相手が返事をしないうちは、同じNPCが続けて話さない', async () => {
     const { llm } = fakeLlm();
     // 人間が黙ったままでも、無操作で切り替わらないよう長くしておく
