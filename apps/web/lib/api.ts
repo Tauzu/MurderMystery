@@ -43,6 +43,13 @@ export interface ScenarioSummary {
 }
 
 export type MatchStatus =
-  | { status: 'waiting'; scenarioId: string; size: number; waiting: number }
+  | {
+      status: 'waiting';
+      scenarioId: string;
+      size: number;
+      waiting: number;
+      remainingSec: number;
+    }
+  | { status: 'starting' }
   | { status: 'matched'; roomId: string }
   | { status: 'none' };

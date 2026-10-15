@@ -47,6 +47,8 @@ beforeAll(async () => {
 afterAll(async () => {
   manager.shutdown();
   await db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await redis.del(`room:${id}:state`);
   await cleanupTestUsers(db);
   await db.$disconnect();
   redis.disconnect();
@@ -235,6 +237,50 @@ describe('RoomManager：再起動からの復元', () => {
     // 復元後も続きから進められる
     for (const seat of seats) await send(roomId, { type: 'Ready', seat }, restarted);
     expect(restarted.getState(roomId)?.state.phase).toBe('REVEAL');
+    restarted.shutdown();
+  });
+});
+
+describe('RoomManager：古い形式の保存状態の復元', () => {
+  const keyOf = (id: string) => `room:${id}:state`;
+
+  it('後から増えた項目が無い状態でも、補って復元できる', async () => {
+    const { roomId } = await startGame(4);
+    const saved = JSON.parse((await redis.get(keyOf(roomId)))!);
+    delete saved.state.typing;
+    delete saved.state.scenario.victim;
+    await redis.set(keyOf(roomId), JSON.stringify(saved));
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    const state = restarted.getState(roomId)!.state;
+    expect(state.typing).toEqual([]);
+    expect(state.scenario.victim).toBeNull();
+    await restarted.tickAll(); // 例外にならない
+    restarted.shutdown();
+  });
+
+  it('対戦記録がDBに無いルームは復元せず、捨てる', async () => {
+    const { roomId } = await startGame(4);
+    await db.game.delete({ where: { id: roomId } });
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    expect(restarted.getState(roomId)).toBeNull();
+    expect(await redis.get(keyOf(roomId))).toBeNull();
+    restarted.shutdown();
+  });
+
+  it('読めない保存状態は復元せず、捨てる', async () => {
+    const { roomId } = await startGame(4);
+    const saved = JSON.parse((await redis.get(keyOf(roomId)))!);
+    saved.state.scenario.characters = []; // 席のキャラクターが見つからない形式
+    await redis.set(keyOf(roomId), JSON.stringify(saved));
+
+    const restarted = newManager();
+    await restarted.restoreAll();
+    expect(restarted.getState(roomId)).toBeNull();
+    expect(await redis.get(keyOf(roomId))).toBeNull();
     restarted.shutdown();
   });
 });

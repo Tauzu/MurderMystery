@@ -22,9 +22,44 @@ function phaseTitle(view: RoomView): string {
   return view.phase === 'REVEAL' || view.phase === 'TALK' ? `第${view.setNo}セット：${base}` : base;
 }
 
+/**
+ * 席が人間からNPCに切り替わったことを知らせる（仕様書 §7.4）。
+ * 状態の変化から検出するので、再接続の直後は通知しない。
+ */
+function useSwitchNotices(view: RoomView | null): string[] {
+  const previous = useRef<Map<number, string> | null>(null);
+  const [notices, setNotices] = useState<{ id: number; text: string }[]>([]);
+  const nextId = useRef(0);
+
+  useEffect(() => {
+    if (!view) return;
+    const kinds = new Map(view.seats.map((s) => [s.seat, s.kind]));
+    const before = previous.current;
+    previous.current = kinds;
+    if (!before) return;
+    for (const seat of view.seats) {
+      if (before.get(seat.seat) === 'human' && seat.kind === 'npc') {
+        const id = nextId.current++;
+        setNotices((list) => [...list, { id, text: `${seat.name}が NPC に切り替わりました` }]);
+        setTimeout(() => setNotices((list) => list.filter((n) => n.id !== id)), 15000);
+      }
+    }
+  }, [view]);
+
+  return notices.map((n) => n.text);
+}
+
 export function GameRoom({ roomId }: { roomId: string }) {
   const socket = useGameSocket(roomId);
   const { view, connection, closeReason } = socket;
+  const switchNotices = useSwitchNotices(view);
+  const phase = view?.phase;
+  const setNo = view?.setNo;
+
+  // 画面が切り替わるとき（導入→確認→…→結果）は、ページの先頭から読めるようにする
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [phase, setNo]);
 
   if (connection === 'closed') {
     return (
@@ -43,6 +78,11 @@ export function GameRoom({ roomId }: { roomId: string }) {
     <>
       <Header socket={socket} view={view} />
       <Banners socket={socket} />
+      {switchNotices.map((text, i) => (
+        <div key={i} className="banner">
+          {text}
+        </div>
+      ))}
       {view.phase === 'INTRO' || view.phase === 'CONFIRM' ? (
         // 冒頭文・状況文の初表示は、読むことに集中できるよう画面いっぱいに出す
         <div className={view.phase === 'CONFIRM' ? 'wide wider' : 'wide'}>
@@ -449,14 +489,16 @@ function ChatLog({
   nameOf: (seat: number) => string;
   empty: string;
 }) {
-  const bottom = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
+  // 会話欄の中だけを最新の発言までスクロールする（scrollIntoView だとページ全体も動いてしまう）
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   return (
-    <div className="chat">
+    <div className="chat" ref={box}>
       {messages.length === 0 && <p className="muted">{empty}</p>}
       {messages.map((m) => (
         <p key={m.id}>
@@ -464,7 +506,6 @@ function ChatLog({
           {m.body}
         </p>
       ))}
-      <div ref={bottom} />
     </div>
   );
 }
@@ -533,6 +574,7 @@ function Talk({
       <h2>{nameOf(partner)}さんと2人で会話</h2>
       <p className="muted">この会話は、あなたと{nameOf(partner)}さんにしか見えません。</p>
       <ChatLog messages={current} nameOf={nameOf} empty="まだ発言がありません。" />
+      <p className="muted typing">{view.partnerTyping ? `${nameOf(partner)}が入力中…` : ' '}</p>
       <ChatInput socket={socket} disabled={disabled}>
         <button
           className="secondary"

@@ -28,6 +28,8 @@ export const CONFIG = {
   NPC_BUDGET_TOKENS: 300_000,
   /** 直近にこの秒数以内の発言があれば、NPCの発言をずらす */
   NPC_TALK_COLLISION_SEC: 5,
+  /** 発言前に「入力中…」を出す秒数の範囲 */
+  NPC_TYPING_SEC: [2, 5] as const,
   /** 自分の発言に相手が返していないとき、続けて話すまで待つ秒数（同じ話の繰り返しを避ける） */
   NPC_FOLLOWUP_WAIT_SEC: 90,
   CHATLOG_RETENTION_DAYS: 90,

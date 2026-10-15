@@ -47,7 +47,7 @@ function fakeLlm(mode: 'ok' | 'down' = 'ok') {
 }
 
 function managerWith(llm: LlmClient, idle: { idleSwitchSec?: number; idleWarnSec?: number } = {}) {
-  const engine = new NpcEngine({ llm, now: () => clock, rng: () => 0.5 });
+  const engine = new NpcEngine({ llm, now: () => clock, rng: () => 0.5, sleep: async () => {} });
   return new RoomManager({ db, redis, now: () => clock, rng: () => 0.5, npc: engine, ...idle });
 }
 
@@ -79,6 +79,8 @@ beforeAll(async () => {
 afterAll(async () => {
   managers.forEach((m) => m.shutdown());
   await db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await redis.del(`room:${id}:state`);
   await cleanupTestUsers(db);
   await db.$disconnect();
   redis.disconnect();
@@ -132,6 +134,41 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const votes = state().votes;
     for (const seat of [1, 2, 3]) expect(votes[seat]).not.toBe(seat);
     expect(calls.length).toBeGreaterThan(0);
+  });
+
+  it('発言を考えている間だけ「入力中」になり、発言すると消える', async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { llm } = fakeLlm();
+    const slow: LlmClient = {
+      async complete(req) {
+        if (req.user.includes('次の発言を1つ')) await gate;
+        return llm.complete(req);
+      },
+    };
+    const mgr = managerWith(slow, { idleSwitchSec: 100_000, idleWarnSec: 99_000 });
+    const roomId = await startOneHumanGame(mgr);
+    const state = () => mgr.getState(roomId)!.state;
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
+    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.tickAll();
+    await settle();
+    await mgr.tickAll();
+    expect(state().phase).toBe('TALK');
+
+    await mgr.tickAll();
+    advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1);
+    await mgr.tickAll();
+    await settle();
+    expect(state().typing).toContain(1); // 席0の相手（席1）が考え中
+
+    release();
+    await settle();
+    await settle();
+    expect(state().typing).not.toContain(1);
+    expect(state().chat.some((m) => m.seat === 1)).toBe(true);
   });
 
   it('相手が返事をしないうちは、同じNPCが続けて話さない', async () => {
@@ -222,7 +259,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
 
   it('予算を使い切ると、AIを呼ばず定型文で話す', async () => {
     const { llm, calls } = fakeLlm();
-    const engine = new NpcEngine({ llm, now: () => clock, rng: () => 0.5 });
+    const engine = new NpcEngine({ llm, now: () => clock, rng: () => 0.5, sleep: async () => {} });
     const mgr = new RoomManager({ db, redis, now: () => clock, rng: () => 0.5, npc: engine });
     const roomId = await startOneHumanGame(mgr);
     const state = () => mgr.getState(roomId)!.state;

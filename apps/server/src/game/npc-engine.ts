@@ -26,6 +26,8 @@ export interface NpcEngineOptions {
   llm: LlmClient;
   now?: () => number;
   rng?: () => number;
+  /** 待つ処理。テストでは即座に返す */
+  sleep?: (ms: number) => Promise<void>;
   log?: (message: string, error?: unknown) => void;
 }
 
@@ -38,8 +40,10 @@ export class NpcEngine {
   private readonly rooms = new Map<string, RoomNpc>();
   private readonly now: () => number;
   private readonly rng: () => number;
+  private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(private readonly opts: NpcEngineOptions) {
+    this.sleep = opts.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
     this.now = opts.now ?? Date.now;
     this.rng = opts.rng ?? Math.random;
   }
@@ -106,11 +110,22 @@ export class NpcEngine {
     }
 
     this.once(room, `talk:${seat}`, async () => {
-      // 古い状態で発言しないよう、呼び出す直前の状態を使う
-      const d = await decideTalk(this.deps(room, seat), view());
-      const after = this.now();
-      room.nextTalk.set(seat, { setNo: state.setNo, at: after + this.delay(room, view()) });
-      if (d) await dispatch({ type: 'Chat', seat, body: d.say });
+      // 考えている間は「入力中…」を出す。生成が早く終わっても、人間らしい間を空けてから発言する（設計書 §8.7）
+      await dispatch({ type: 'NpcTyping', seat, typing: true });
+      try {
+        const [min, max] = CONFIG.NPC_TYPING_SEC;
+        const typingMs = (min + this.rng() * (max - min)) * 1000;
+        // 古い状態で発言しないよう、呼び出す直前の状態を使う
+        const [d] = await Promise.all([
+          decideTalk(this.deps(room, seat), view()),
+          this.sleep(typingMs),
+        ]);
+        const after = this.now();
+        room.nextTalk.set(seat, { setNo: state.setNo, at: after + this.delay(room, view()) });
+        if (d) await dispatch({ type: 'Chat', seat, body: d.say });
+      } finally {
+        await dispatch({ type: 'NpcTyping', seat, typing: false });
+      }
     });
   }
 

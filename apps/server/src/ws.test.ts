@@ -143,6 +143,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await t.db.game.deleteMany({ where: { id: { in: gameIds } } });
+  // 保存された状態が残ると、次にサーバーを起動したとき復元されてしまう
+  for (const id of gameIds) await t.redis.del(`room:${id}:state`);
   await cleanupTestUsers(t.db);
   await t.close();
 });
@@ -389,5 +391,44 @@ describe('WebSocket：観戦とレート制限', () => {
     // 観戦者は resync で最新の状態を取得できる
     c.send({ type: 'resync' });
     c.close();
+  });
+});
+
+describe('WebSocket：再接続', () => {
+  it('切断して再接続すると、同じ席で、会話と公開カードがそのまま戻る', async () => {
+    const { roomId, players } = await startFourPlayerGame();
+    const rooms = t.app.deps.rooms;
+    const first = await Client.connect(roomId, players[0]!.cookie);
+    await first.waitFor((m) => m.type === 'snapshot');
+    const seat = first.lastView().me.seat;
+
+    // 第1セットの会話まで進める
+    for (let phase = 0; phase < 2; phase++) {
+      for (const s of [0, 1, 2, 3]) await rooms.dispatch(roomId, { type: 'Ready', seat: s });
+    }
+    for (const s of [0, 1, 2, 3]) {
+      const state = rooms.getState(roomId)!.state;
+      const character = state.scenario.characters.find(
+        (c) => c.id === state.seats[s]!.characterId,
+      )!;
+      await rooms.dispatch(roomId, { type: 'PickCard', seat: s, cardId: character.cards[0]!.id });
+    }
+    first.send({ type: 'chat', body: '切断前の発言' });
+    await first.waitFor(
+      (m) => m.type === 'snapshot' && m.view.chat.some((x) => x.body === '切断前の発言'),
+    );
+
+    first.close();
+    await first.closed;
+
+    const second = await Client.connect(roomId, players[0]!.cookie);
+    await second.waitFor((m) => m.type === 'snapshot');
+    const view = second.lastView();
+    expect(view.me.seat).toBe(seat);
+    expect(view.phase).toBe('TALK');
+    expect(view.revealed).toHaveLength(4);
+    expect(view.chat.map((x) => x.body)).toContain('切断前の発言');
+    expect(view.seats.find((s) => s.seat === seat)?.kind).toBe('human');
+    second.close();
   });
 });

@@ -339,3 +339,8 @@ ul.plain li:last-child {
     order: 0;
   }
 }
+
+.typing {
+  min-height: 1.4em;
+  margin: 0 0 8px;
+}

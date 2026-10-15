@@ -40,6 +40,17 @@ export async function matchRoutes(app: FastifyInstance) {
     return matchmaker.status(userId);
   });
 
+  // 「今すぐNPCで開始」。待機中の人だけで、不足分をNPCで補って始める
+  app.post('/matches/current/start', async (request, reply) => {
+    const userId = await app.requireUserId(request, reply);
+    if (!userId) return;
+    const started = await matchmaker.startNow(userId);
+    if (!started) {
+      return reply.code(409).send({ code: 'not_waiting', message: '待機中ではありません' });
+    }
+    return reply.code(202).send(matchmaker.status(userId));
+  });
+
   app.delete('/matches/current', async (request, reply) => {
     const userId = await app.requireUserId(request, reply);
     if (!userId) return;

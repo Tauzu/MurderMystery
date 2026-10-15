@@ -89,6 +89,8 @@ export interface RoomState {
   revealed: RevealedCard[];
   /** TALK で「話し終えた」に同意した席 */
   agreedEnd: number[];
+  /** TALK で、発言を考え中（「入力中…」を出す）のNPC席 */
+  typing: number[];
   chat: ChatMessage[];
   nextChatId: number;
   /** VOTE の投票（席 → 対象の席。棄権は null） */
@@ -102,6 +104,7 @@ export type RoomEvent =
   | { type: 'PickCard'; seat: number; cardId: string }
   | { type: 'Chat'; seat: number; body: string }
   | { type: 'AgreeEndTalk'; seat: number }
+  | { type: 'NpcTyping'; seat: number; typing: boolean }
   | { type: 'Vote'; seat: number; target: number }
   | { type: 'SwitchToNpc'; seat: number }
   | { type: 'Close' }
