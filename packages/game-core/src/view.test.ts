@@ -99,6 +99,21 @@ describe('projectView（秘匿の保証）', () => {
     }
   });
 
+  it('「入力中」は、いまの会話の相手のNPCについてだけ見える', () => {
+    let s = allReady(allReady(newRoom(), T0), T0);
+    for (const seat of SEATS) {
+      const ch = characterOf(s, s.seats[seat]!);
+      s = apply(s, { type: 'PickCard', seat, cardId: ch.cards[0]!.id }, T0 + 1).state;
+    }
+    // 席1と席2をNPCにして、席1が入力中（セット1の組は 0-1・2-3）
+    s.seats[1]!.kind = 'npc';
+    s.seats[2]!.kind = 'npc';
+    s = apply(s, { type: 'NpcTyping', seat: 1, typing: true }, T0 + 2).state;
+    expect(projectView(s, 0, T0).partnerTyping).toBe(true);
+    expect(projectView(s, 2, T0).partnerTyping).toBe(false);
+    expect(projectView(s, 3, T0).partnerTyping).toBe(false);
+  });
+
   it('被害者は全員に見える', () => {
     const s = newRoom();
     for (const seat of SEATS) {

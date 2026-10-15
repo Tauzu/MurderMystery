@@ -102,6 +102,15 @@ function applyEvent(
       return null;
     }
 
+    case 'NpcTyping': {
+      if (state.phase !== 'TALK') return wrongPhase();
+      const seat = state.seats[event.seat];
+      if (!seat || seat.kind !== 'npc') return err('invalid_seat', 'NPCの席ではありません');
+      state.typing = state.typing.filter((s) => s !== seat.index);
+      if (event.typing) state.typing.push(seat.index);
+      return null;
+    }
+
     case 'Chat': {
       // TALK は2人1組の会話、RESULT は全員での感想戦
       if (state.phase !== 'TALK' && state.phase !== 'RESULT') return wrongPhase();
@@ -112,6 +121,7 @@ function applyEvent(
         return err('invalid_body', `発言は1〜${CONFIG.CHAT_MAX_CHARS}文字で入力してください`);
       }
       touch(seat, ctx);
+      state.typing = state.typing.filter((s) => s !== seat.index);
       state.chat.push({
         id: state.nextChatId++,
         seat: seat.index,
@@ -261,6 +271,7 @@ function advance(state: RoomState, ctx: Context, effects: Effect[]): boolean {
           enterReveal(state, state.setNo + 1, ctx);
         } else {
           state.phase = 'VOTE';
+          state.typing = [];
           state.votes = {};
           state.deadlineAt = ctx.now + sec(CONFIG.VOTE_SEC);
         }
@@ -289,6 +300,7 @@ function advance(state: RoomState, ctx: Context, effects: Effect[]): boolean {
 }
 
 function enterReveal(state: RoomState, setNo: number, ctx: Context) {
+  state.typing = [];
   state.phase = 'REVEAL';
   state.setNo = setNo;
   state.picks = {};

@@ -61,6 +61,8 @@ export interface RoomView {
   /** 自分が選択中のカード */
   myPick: string | null;
   agreedEndSeats: number[];
+  /** いまの会話の相手（NPC）が発言を考え中か */
+  partnerTyping: boolean;
   revealed: RevealedCardView[];
   chat: ChatMessage[];
   /** 投票済みの席。誰に入れたかは結果まで伝えない */
@@ -131,6 +133,8 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
     pickedSeats: Object.keys(state.picks).map(Number),
     myPick: state.picks[mySeat.index] ?? null,
     agreedEndSeats: [...state.agreedEnd],
+    partnerTyping:
+      state.phase === 'TALK' && state.typing.includes(partnerOf(mySeat.index, state.setNo)),
     revealed,
     // プレイ中は自分の組の会話だけ。他の組の会話は結果が出てから開示する
     chat: state.chat

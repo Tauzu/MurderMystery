@@ -140,6 +140,22 @@ describe('通しの進行（全員が人間）', () => {
     expect(s.chat.at(-1)).toMatchObject({ seat: 2, scope: 'all' });
   });
 
+  it('NPCの「入力中」は、発言すると消える。会話以外では受け付けない', () => {
+    let s = newRoom(1); // 席0だけが人間
+    expect(reduce(s, { type: 'NpcTyping', seat: 1, typing: true }, ctx(T0 + 1)).error?.code).toBe(
+      'wrong_phase',
+    );
+    s = allPick(allReady(allReady(s, T0), T0), T0);
+    expect(s.phase).toBe('TALK');
+    expect(reduce(s, { type: 'NpcTyping', seat: 0, typing: true }, ctx(T0 + 1)).error?.code).toBe(
+      'invalid_seat',
+    );
+    s = apply(s, { type: 'NpcTyping', seat: 1, typing: true }, T0 + 1).state;
+    expect(s.typing).toEqual([1]);
+    s = apply(s, { type: 'Chat', seat: 1, body: 'こんにちは' }, T0 + 2).state;
+    expect(s.typing).toEqual([]);
+  });
+
   it('投票中の発言は拒否される', () => {
     const s = playToVote(newRoom());
     expect(reduce(s, { type: 'Chat', seat: 0, body: 'x' }, ctx(T0 + 2000)).error?.code).toBe(

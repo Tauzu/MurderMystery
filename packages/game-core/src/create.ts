@@ -57,6 +57,7 @@ export function createRoom(input: CreateRoomInput, ctx: Context): RoomState {
     picks: {},
     revealed: [],
     agreedEnd: [],
+    typing: [],
     chat: [],
     nextChatId: 1,
     votes: {},

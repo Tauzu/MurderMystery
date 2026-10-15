@@ -566,6 +566,7 @@ function Talk({
       <h2>{nameOf(partner)}さんと2人で会話</h2>
       <p className="muted">この会話は、あなたと{nameOf(partner)}さんにしか見えません。</p>
       <ChatLog messages={current} nameOf={nameOf} empty="まだ発言がありません。" />
+      <p className="muted typing">{view.partnerTyping ? `${nameOf(partner)}が入力中…` : ' '}</p>
       <ChatInput socket={socket} disabled={disabled}>
         <button
           className="secondary"
