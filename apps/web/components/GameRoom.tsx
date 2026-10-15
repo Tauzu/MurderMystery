@@ -53,6 +53,13 @@ export function GameRoom({ roomId }: { roomId: string }) {
   const socket = useGameSocket(roomId);
   const { view, connection, closeReason } = socket;
   const switchNotices = useSwitchNotices(view);
+  const phase = view?.phase;
+  const setNo = view?.setNo;
+
+  // 画面が切り替わるとき（導入→確認→…→結果）は、ページの先頭から読めるようにする
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+  }, [phase, setNo]);
 
   if (connection === 'closed') {
     return (
@@ -482,14 +489,16 @@ function ChatLog({
   nameOf: (seat: number) => string;
   empty: string;
 }) {
-  const bottom = useRef<HTMLDivElement>(null);
+  const box = useRef<HTMLDivElement>(null);
 
+  // 会話欄の中だけを最新の発言までスクロールする（scrollIntoView だとページ全体も動いてしまう）
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: 'end' });
+    const el = box.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [messages.length]);
 
   return (
-    <div className="chat">
+    <div className="chat" ref={box}>
       {messages.length === 0 && <p className="muted">{empty}</p>}
       {messages.map((m) => (
         <p key={m.id}>
@@ -497,7 +506,6 @@ function ChatLog({
           {m.body}
         </p>
       ))}
-      <div ref={bottom} />
     </div>
   );
 }
