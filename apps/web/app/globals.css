@@ -275,6 +275,23 @@ ul.plain li:last-child {
   border-color: var(--accent);
 }
 
+/* カードの種類（目撃証言／証拠品） */
+.kind {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: normal;
+  color: var(--muted);
+  margin-right: 6px;
+}
+
+.kind.item::before {
+  content: '◆ ';
+}
+
+.kind.testimony::before {
+  content: '◇ ';
+}
+
 .badge.danger {
   color: var(--danger);
   border-color: var(--danger);

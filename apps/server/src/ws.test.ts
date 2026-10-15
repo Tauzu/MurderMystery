@@ -327,9 +327,14 @@ describe('WebSocket：4人で最後まで遊ぶ', () => {
           expect(json).not.toContain(ch.situationText);
           for (const card of ch.cards) {
             if (revealedBodies.has(card.body)) continue;
+            // 犯人には、他人の手札にある捏造カードも見える（仕様書 §4.3.1）
+            if (card.isFabricated && m.view.me.isCulprit) continue;
             expect(json).not.toContain(card.body);
           }
         }
+        // どれが捏造かは、犯人以外に伝えない
+        if (!m.view.me.isCulprit) expect(m.view.me.fabricatedCard).toBeNull();
+        expect(json).not.toContain('"fabricated"');
         expect(json).not.toContain('犯人は、医師の白石葵');
       }
     }

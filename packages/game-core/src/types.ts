@@ -1,4 +1,4 @@
-import type { Phase } from '@mm/shared';
+import type { CardKind, Phase } from '@mm/shared';
 
 /** ゲームに必要なシナリオの内容。DBの行をこの形に変換してルームに渡す。 */
 export interface ScenarioData {
@@ -20,8 +20,11 @@ export interface CharacterData {
 
 export interface CardData {
   id: string;
+  kind: CardKind;
   title: string;
   body: string;
+  /** 捏造カード。シナリオ全体で1枚。犯人以外には結果まで伝えない（仕様書 §4.3.1） */
+  isFabricated: boolean;
 }
 
 export type SeatKind = 'human' | 'npc';
