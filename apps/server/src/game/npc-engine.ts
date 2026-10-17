@@ -15,7 +15,7 @@ export type Dispatch = (event: RoomEvent) => Promise<RoomError | null>;
 interface RoomNpc {
   budget: Budget;
   /** 席 → 次回発言予定（セットが変わったら組み直す） */
-  nextTalk: Map<number, { setNo: number; at: number }>;
+  nextTalk: Map<number, { setNo: number; at: number; reactedTo?: number }>;
   /** AI呼び出し中の行動。同じ行動を二重に始めないための印 */
   inFlight: Set<string>;
   /** 席 → 性格（席ごとに最初に決めたものを使い続ける） */
@@ -93,12 +93,19 @@ export class NpcEngine {
       room.nextTalk.set(seat, { setNo: state.setNo, at: now + this.delay(room, view()) });
       return;
     }
-    if (now < schedule.at) return;
-
-    // 直前に誰かが話していたら、重ならないように少しずらす（設計書 §8.2）
     const last = view()
       .chat.filter((m) => m.setNo === state.setNo)
       .at(-1);
+
+    // 次の発言を待っている間に相手が話しかけてきたら、予定を前倒しして返事をする（設計書 §8.2）。
+    // 予定は自分の発言の直後に組むため、相手の発言を見てから組み直さないと、30〜60秒待たせてしまう。
+    if (last && last.seat !== seat && schedule.reactedTo !== last.id) {
+      schedule.reactedTo = last.id;
+      schedule.at = Math.min(schedule.at, last.at + this.delay(room, view()));
+    }
+    if (now < schedule.at) return;
+
+    // 直前に誰かが話していたら、重ならないように少しずらす（設計書 §8.2）
     if (last && now - last.at < CONFIG.NPC_TALK_COLLISION_SEC * 1000) {
       schedule.at = now + CONFIG.NPC_TALK_COLLISION_SEC * 1000;
       return;

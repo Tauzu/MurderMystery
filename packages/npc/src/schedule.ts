@@ -9,7 +9,7 @@ export function isAddressed(view: RoomView): boolean {
 
 /**
  * 次の発言までの待ち時間（ミリ秒）。
- * 通常は30〜60秒のランダム。名指しされていれば前倒しし、予算が逼迫していれば延ばす。
+ * 通常は30〜60秒のランダム。名指しされていれば3〜6秒に前倒しし、予算が逼迫していれば延ばす。
  */
 export function nextTalkDelayMs(opts: {
   view: RoomView;
@@ -17,7 +17,7 @@ export function nextTalkDelayMs(opts: {
   budgetSlow: boolean;
 }): number {
   const [min, max] = CONFIG.NPC_TALK_INTERVAL_SEC;
-  let sec = isAddressed(opts.view) ? 5 + opts.rng() * 5 : min + opts.rng() * (max - min);
+  let sec = isAddressed(opts.view) ? 3 + opts.rng() * 3 : min + opts.rng() * (max - min);
   if (opts.budgetSlow) sec *= 2;
   return Math.round(sec * 1000);
 }

@@ -243,6 +243,35 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     expect(fromSeat1()).toBe(2);
   });
 
+  it('次の発言を待っている間に人間が話しかけたら、通常の間隔を待たずに返事をする', async () => {
+    const { llm } = fakeLlm();
+    const mgr = managerWith(llm, { idleSwitchSec: 100_000, idleWarnSec: 99_000 });
+    const roomId = await startOneHumanGame(mgr);
+    const state = () => mgr.getState(roomId)!.state;
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
+    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.tickAll();
+    await settle();
+    await mgr.tickAll();
+
+    const fromSeat1 = () => state().chat.filter((m) => m.seat === 1).length;
+    await mgr.tickAll();
+    advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1);
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(1);
+
+    // NPCの発言の直後（次の予定は30〜60秒後）に、人間が返事をする
+    await mgr.dispatch(roomId, { type: 'Chat', seat: 0, body: 'その時刻は、どこにいましたか？' });
+    advance(10);
+    await mgr.tickAll();
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(2);
+  });
+
   it('NPCに渡したプロンプトに、他の席の状況文・未公開カードは含まれない', async () => {
     const { llm, calls } = fakeLlm();
     const mgr = managerWith(llm);
