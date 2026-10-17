@@ -287,7 +287,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     }
 
     const { state } = mgr.getState(roomId)!;
-    const asked = calls.map((c) => c.user);
+    const asked = calls.map((c) => (c.userStable ?? '') + c.user);
     expect(asked.length).toBeGreaterThanOrEqual(3);
     for (const seat of [1, 2, 3]) {
       const own = state.scenario.characters.find((c) => c.id === state.seats[seat]!.characterId)!;

@@ -14,7 +14,7 @@ import {
   type NpcDeps,
 } from './decide';
 import type { LlmClient, LlmRequest } from './llm';
-import { pickPrompt, systemPrompt, talkPrompt, votePrompt } from './prompt';
+import { pickPrompt, stablePrompt, systemPrompt, talkPrompt, votePrompt } from './prompt';
 import { isAddressed, nextTalkDelayMs } from './schedule';
 
 /** 席0〜3にキャラA〜Dを順に割り当てた部屋。犯人は席2（C）。 */
@@ -232,6 +232,20 @@ describe('decideTalk', () => {
     const { llm } = mockLlm(['{"say": "ええ。"}']);
     await decideTalk(deps(llm, budget), viewOf(0));
     expect(budget.usedTokens).toBe(1050);
+  });
+});
+
+describe('プロンプトキャッシュ', () => {
+  it('ゲームを通して変わらない前半を userStable に分け、つなぐと元のプロンプトになる', async () => {
+    const { llm, calls } = mockLlm(['{"say": "ところで、昨夜はどこにいましたか？"}']);
+    const view = viewOf(1);
+    await decideTalk(deps(llm), view);
+    const req = calls[0]!;
+    expect(req.userStable).toBe(stablePrompt(view));
+    expect(req.userStable! + req.user).toBe(talkPrompt(view));
+    // 会話のたびに変わる部分は、キャッシュの対象に入れない
+    expect(req.userStable).not.toContain('公開済みカード');
+    expect(req.userStable).toContain('SECRET-SITUATION-B');
   });
 });
 
