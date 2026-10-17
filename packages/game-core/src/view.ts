@@ -1,5 +1,5 @@
 import type { CardKind, Phase } from '@mm/shared';
-import { characterOf, partnerOf } from './reduce';
+import { characterOf, partnerOf, pickableSeats } from './reduce';
 import type { CardData, ChatMessage, GameResult, RoomState, SeatKind } from './types';
 
 /** カードの見える部分。捏造かどうかは含めない */
@@ -20,7 +20,10 @@ export interface SeatView {
 
 export interface RevealedCardView {
   setNo: number;
+  /** 手札の持ち主の席 */
   seat: number;
+  /** 指名した席 */
+  by: number;
   card: CardView;
 }
 
@@ -44,8 +47,6 @@ export interface RoomView {
   me: {
     seat: number;
     situationText: string;
-    /** 自分の手札4枚。公開済みかどうかを付ける */
-    cards: (CardView & { revealed: boolean })[];
     /** 犯人かどうかは、自分についてのみ伝える */
     isCulprit: boolean;
     /**
@@ -56,10 +57,12 @@ export interface RoomView {
   };
   /** INTRO / CONFIRM で「次へ」を押した席 */
   readySeats: number[];
-  /** REVEAL で選択済みの席。何を選んだかは同時公開まで伝えない */
+  /** REVEAL で指名済みの席。誰を指名したかは同時公開まで伝えない */
   pickedSeats: number[];
-  /** 自分が選択中のカード */
-  myPick: string | null;
+  /** 自分が指名した席 */
+  myPick: number | null;
+  /** 自分が指名できる席（自分以外で、未公開の手札が残る席） */
+  pickableSeats: number[];
   agreedEndSeats: number[];
   /** いまの会話の相手（NPC）が発言を考え中か */
   partnerTyping: boolean;
@@ -102,7 +105,7 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
   const revealed: RevealedCardView[] = state.revealed.map((r) => {
     const seat = state.seats[r.seat]!;
     const card = characterOf(state, seat).cards.find((c) => c.id === r.cardId)!;
-    return { setNo: r.setNo, seat: r.seat, card: cardView(card) };
+    return { setNo: r.setNo, seat: r.seat, by: r.by, card: cardView(card) };
   });
 
   return {
@@ -125,13 +128,13 @@ export function projectView(state: RoomState, seatIndex: number, now: number): R
     me: {
       seat: mySeat.index,
       situationText: me.situationText,
-      cards: me.cards.map((c) => ({ ...cardView(c), revealed: revealedIds.has(c.id) })),
       isCulprit: me.isCulprit,
       fabricatedCard,
     },
     readySeats: [...state.ready],
     pickedSeats: Object.keys(state.picks).map(Number),
     myPick: state.picks[mySeat.index] ?? null,
+    pickableSeats: pickableSeats(state, mySeat.index),
     agreedEndSeats: [...state.agreedEnd],
     partnerTyping:
       state.phase === 'TALK' && state.typing.includes(partnerOf(mySeat.index, state.setNo)),

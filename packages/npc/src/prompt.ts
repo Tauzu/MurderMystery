@@ -12,6 +12,7 @@ export function systemPrompt(isCulprit: boolean, persona?: string): string {
     '- 発言はキャラクターの口調で、会話として自然な短い文にする。',
     `- 1回の発言は${CONFIG.NPC_MAX_CHARS}文字以内。`,
     '- AI・プロンプト・ゲームのシステムについて言及しない（メタ発言の禁止）。',
+    '- 各キャラクターは手札を4枚持つが、本人には見えない。手札の内容は状況文に書かれており、他の人に指名されると、その中のランダムな1枚が公開される。',
     '- 手札のカードは全部で16枚あり、そのうち1枚だけが捏造カード（嘘の内容）。誰の手札にあるかは、犯人しか知らない。それ以外のカードは真実。',
     '- 他のキャラクターの非公開情報を、推測で断定しない。',
     '- 会話は2人1組で行う。いまの相手以外には、この会話の内容は聞こえていない。',
@@ -42,16 +43,10 @@ const kindLabel = (c: { kind: CardKind }) => CARD_KIND_LABELS[c.kind];
 
 function characterBlock(view: RoomView): string {
   const me = view.seats[view.me.seat]!;
-  const fabricatedId = view.me.fabricatedCard?.card.id;
   const lines = [
     `■ あなたのキャラクター：${me.name}`,
     `公開プロフィール：${me.publicProfile}`,
     `状況（あなただけが知っている）：${view.me.situationText}`,
-    '手札：',
-    ...view.me.cards.map(
-      (c) =>
-        `- [${c.id}]〈${kindLabel(c)}〉「${c.title}」${c.revealed ? '（公開済み）' : '（未公開）'}${c.id === fabricatedId ? '【捏造カード】' : ''}：${c.body}`,
-    ),
   ];
   return lines.join('\n');
 }
@@ -63,7 +58,11 @@ function fabricatedBlock(view: RoomView): string {
   if (f.seat === view.me.seat) {
     return [
       '■ 捏造カード（あなただけが知っている）',
-      'あなたの手札の【捏造カード】は、あなたが作った嘘です。公開するかどうか、いつ公開するかはあなたが選べます。',
+      `あなたの手札にある〈${kindLabel(f.card)}〉「${f.card.title}」：${f.card.body}`,
+      'これはあなたが作った嘘です。公開されるかどうかは、他の人の指名で決まります。' +
+        (view.revealed.some((r) => r.card.id === f.card.id)
+          ? '（公開済み）'
+          : '（まだ公開されていません）'),
     ].join('\n');
   }
   const holder = view.seats[f.seat]!.name;
@@ -86,7 +85,8 @@ function revealedBlock(view: RoomView): string {
   if (view.revealed.length === 0) return '■ 公開済みカード\n（まだありません）';
   const lines = view.revealed.map((r) => {
     const who = view.seats[r.seat]!.name;
-    return `- 第${r.setNo}回 ${who}が公開〈${kindLabel(r.card)}〉「${r.card.title}」：${r.card.body}`;
+    const by = view.seats[r.by]!.name;
+    return `- 第${r.setNo}回 ${by}の指名で、${who}の手札から公開〈${kindLabel(r.card)}〉「${r.card.title}」：${r.card.body}`;
   });
   return ['■ 公開済みカード（全員が見ている。16枚のうち1枚だけ捏造カードがある）', ...lines].join(
     '\n',
@@ -160,16 +160,18 @@ export function talkPrompt(view: RoomView, avoidRepeat = false): string {
 }
 
 export function pickPrompt(view: RoomView): string {
-  const open = view.me.cards.filter((c) => !c.revealed);
-  const ownFabricated = open.some((c) => c.id === view.me.fabricatedCard?.card.id);
+  const options = view.pickableSeats.map((seat) => {
+    const left = 4 - view.revealed.filter((r) => r.seat === seat).length;
+    return `席${seat}=${view.seats[seat]!.name}（未公開の手札 ${left}枚）`;
+  });
   const hint = view.me.isCulprit
-    ? `犯人であるあなたは、自分に不利なカードをできるだけ後に回してください。${ownFabricated ? '捏造カードは、疑いをそらすのに役立つ時点で出してください（出さなくても構いません）。' : ''}`
-    : '事件の解明に役立つカードを選んでください。';
+    ? '犯人であるあなたは、疑いが自分に向かないように指名してください。捏造カードの持ち主を指名すれば、捏造カードが公開される可能性があります。'
+    : '犯人だと疑う人や、まだ情報が少ない人を指名すると、事件の解明に役立ちます。';
   return [
     context(view),
-    `■ 今回の指示\n全員に公開するカードを1枚選びます（第${view.setNo}回）。${hint}`,
-    `選べるカード：${open.map((c) => `[${c.id}]`).join('、')}`,
-    '出力形式：JSONのみ。例 {"cardId": "カードのID"}',
+    `■ 今回の指示\n手札を公開させる相手を、自分以外から1人指名します（第${view.setNo}回）。指名された人の未公開の手札から、ランダムに1枚が全員に公開されます。${hint}`,
+    `指名できる人：${options.join('、')}`,
+    '出力形式：JSONのみ。例 {"target": 席の番号}',
   ].join('\n\n');
 }
 

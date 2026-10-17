@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { SEATS, T0, allAgreeEnd, allReady, apply, culpritSeat, newRoom } from './fixtures';
+import {
+  SEATS,
+  T0,
+  allAgreeEnd,
+  allPick,
+  allReady,
+  apply,
+  culpritSeat,
+  newRoom,
+  pickNext,
+} from './fixtures';
 import { characterOf, projectView } from './index';
 import type { RoomState } from './types';
 
@@ -62,9 +72,7 @@ describe('projectView（秘匿の保証）', () => {
       checkAll(`セット${set}の公開前`);
       // 一人ずつ選び、選択の途中でも他人の選択内容が見えないこと
       for (const seat of SEATS) {
-        const ch = characterOf(s, s.seats[seat]!);
-        const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-        s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 3).state;
+        s = pickNext(s, seat, T0 + 3);
         if (s.phase === 'REVEAL') checkAll(`セット${set}の選択途中`);
       }
       checkAll(`セット${set}の会話`);
@@ -84,27 +92,22 @@ describe('projectView（秘匿の保証）', () => {
 
   it('公開されたカードは全員に見える', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
-    for (const seat of SEATS) {
-      const ch = characterOf(s, s.seats[seat]!);
-      s = apply(s, { type: 'PickCard', seat, cardId: ch.cards[0]!.id }, T0 + 1).state;
-    }
+    s = allPick(s, T0 + 1);
     for (const viewer of SEATS) {
       const v = projectView(s, viewer, T0);
       expect(v.revealed).toHaveLength(4);
       const json = JSON.stringify(v);
-      for (const seat of SEATS) {
-        const ch = characterOf(s, s.seats[seat]!);
-        expect(json).toContain(ch.cards[0]!.body);
+      for (const r of s.revealed) {
+        expect(json).toContain(v.revealed.find((x) => x.card.id === r.cardId)!.card.body);
       }
+      // 誰が誰を指名したかも見える
+      expect(v.revealed.map((r) => [r.by, r.seat])).toEqual(s.revealed.map((r) => [r.by, r.seat]));
     }
   });
 
   it('「入力中」は、いまの会話の相手のNPCについてだけ見える', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
-    for (const seat of SEATS) {
-      const ch = characterOf(s, s.seats[seat]!);
-      s = apply(s, { type: 'PickCard', seat, cardId: ch.cards[0]!.id }, T0 + 1).state;
-    }
+    s = allPick(s, T0 + 1);
     // 席1と席2をNPCにして、席1が入力中（セット1の組は 0-1・2-3）
     s.seats[1]!.kind = 'npc';
     s.seats[2]!.kind = 'npc';
@@ -130,7 +133,8 @@ describe('projectView（秘匿の保証）', () => {
       const v = projectView(s, seat, T0);
       const ch = characterOf(s, s.seats[seat]!);
       expect(v.me.situationText).toBe(ch.situationText);
-      expect(v.me.cards.map((c) => c.id)).toEqual(ch.cards.map((c) => c.id));
+      // 自分の手札は画面に出さない（内容は状況文に含まれる）
+      expect('cards' in v.me).toBe(false);
       expect(v.introText).toBe('INTRO-TEXT');
     }
   });
@@ -162,10 +166,8 @@ describe('projectView（秘匿の保証）', () => {
         expect(v.me.fabricatedCard).toBeNull();
       }
     }
-    // 持ち主の手札にも、捏造の印は付かない
-    expect(Object.keys(projectView(s, holder, T0).me.cards[0]!).sort()).toEqual(
-      ['body', 'id', 'kind', 'revealed', 'title'].sort(),
-    );
+    // 持ち主のビューには、手札も捏造の印も含まれない
+    expect(JSON.stringify(projectView(s, holder, T0))).not.toContain('SECRET-CARD-BODY-A4');
   });
 
   it('捏造カードが犯人の手札にある場合も、犯人にだけ分かる', () => {
@@ -181,11 +183,11 @@ describe('projectView（秘匿の保証）', () => {
     }
   });
 
-  it('自分が選択中のカードだけが myPick で分かる', () => {
+  it('自分が指名した席だけが myPick で分かる。指名できる席も分かる', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
-    const card = characterOf(s, s.seats[0]!).cards[1]!;
-    s = apply(s, { type: 'PickCard', seat: 0, cardId: card.id }, T0 + 1).state;
-    expect(projectView(s, 0, T0).myPick).toBe(card.id);
+    expect(projectView(s, 0, T0).pickableSeats).toEqual([1, 2, 3]);
+    s = apply(s, { type: 'PickTarget', seat: 0, target: 2 }, T0 + 1).state;
+    expect(projectView(s, 0, T0).myPick).toBe(2);
     expect(projectView(s, 1, T0).myPick).toBeNull();
     expect(projectView(s, 1, T0).pickedSeats).toEqual([0]);
   });
@@ -193,11 +195,7 @@ describe('projectView（秘匿の保証）', () => {
   it('結果が出ると、結末文・犯人・全員の手札・投票が見られる', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
     for (let set = 1; set <= 3; set++) {
-      for (const seat of SEATS) {
-        const ch = characterOf(s, s.seats[seat]!);
-        const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-        s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 1).state;
-      }
+      s = allPick(s, T0 + 1);
       s = allAgreeEnd(s, T0 + 2);
     }
     const c = culpritSeat(s);
@@ -229,10 +227,7 @@ describe('projectView（2人1組の会話）', () => {
   /** セット1の会話で、各席が「席N」と発言した状態 */
   function talkingRoom() {
     let s = allReady(allReady(newRoom(), T0), T0);
-    for (const seat of SEATS) {
-      const ch = characterOf(s, s.seats[seat]!);
-      s = apply(s, { type: 'PickCard', seat, cardId: ch.cards[0]!.id }, T0 + 1).state;
-    }
+    s = allPick(s, T0 + 1);
     for (const seat of SEATS) s = apply(s, { type: 'Chat', seat, body: `席${seat}` }, T0 + 2).state;
     return s;
   }
@@ -248,11 +243,7 @@ describe('projectView（2人1組の会話）', () => {
 
   it('組が変わっても、過去のセットの会話は自分が参加した分だけ見える', () => {
     let s = allAgreeEnd(talkingRoom(), T0 + 3);
-    for (const seat of SEATS) {
-      const ch = characterOf(s, s.seats[seat]!);
-      const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-      s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 4).state;
-    }
+    s = allPick(s, T0 + 4);
     expect(s.setNo).toBe(2);
     for (const seat of SEATS)
       s = apply(s, { type: 'Chat', seat, body: `第2回の席${seat}` }, T0 + 5).state;
@@ -269,11 +260,7 @@ describe('projectView（2人1組の会話）', () => {
     let s = talkingRoom();
     s = allAgreeEnd(s, T0 + 3);
     for (let set = 2; set <= 3; set++) {
-      for (const seat of SEATS) {
-        const ch = characterOf(s, s.seats[seat]!);
-        const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-        s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 4).state;
-      }
+      s = allPick(s, T0 + 4);
       s = allAgreeEnd(s, T0 + 5);
     }
     const c = culpritSeat(s);

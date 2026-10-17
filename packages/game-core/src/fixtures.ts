@@ -1,5 +1,5 @@
 import type { Context, Participant, RoomState, ScenarioData } from './index';
-import { createRoom, reduce } from './index';
+import { createRoom, pickableSeats, reduce } from './index';
 import type { RoomEvent } from './types';
 
 /** テスト用の決定的な乱数（mulberry32）。 */
@@ -80,14 +80,16 @@ export function allReady(state: RoomState, now: number) {
   return s;
 }
 
+/** seat が、次の席を指名する（その席の手札が尽きていれば、指名できる最初の席）。 */
+export function pickNext(state: RoomState, seat: number, now: number) {
+  const options = pickableSeats(state, seat);
+  const target = options.includes((seat + 1) % 4) ? (seat + 1) % 4 : options[0]!;
+  return apply(state, { type: 'PickTarget', seat, target }, now).state;
+}
+
 export function allPick(state: RoomState, now: number) {
   let s = state;
-  for (const seat of SEATS) {
-    const seatInfo = s.seats[seat]!;
-    const ch = s.scenario.characters.find((c) => c.id === seatInfo.characterId)!;
-    const card = ch.cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-    s = apply(s, { type: 'PickCard', seat, cardId: card.id }, now).state;
-  }
+  for (const seat of SEATS) s = pickNext(s, seat, now);
   return s;
 }
 

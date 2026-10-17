@@ -7,7 +7,7 @@ import type { RoomView } from './view';
  */
 export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('ready') }),
-  z.object({ type: z.literal('pickCard'), cardId: z.string().min(1).max(64) }),
+  z.object({ type: z.literal('pickTarget'), target: z.number().int() }),
   z.object({ type: z.literal('chat'), body: z.string().max(1000) }),
   z.object({ type: z.literal('agreeEndTalk') }),
   z.object({ type: z.literal('vote'), targetSeat: z.number().int() }),

@@ -9,7 +9,7 @@ import {
   Budget,
   copiesSecret,
   createAnthropicClient,
-  decidePick,
+  decideTarget,
   decideTalk,
   decideVote,
   type LlmClient,
@@ -125,14 +125,15 @@ for (let set = 1; set <= 3; set++) {
   if (state.phase !== 'REVEAL') throw new Error(`REVEAL のはずが ${state.phase}`);
   console.log(`## 第${set}回`);
   for (const seat of state.seats) {
-    const d = await decidePick(deps, view(seat.index));
+    const d = await decideTarget(deps, view(seat.index));
     if (d.source === 'fallback') fallbacks.push(`pick 席${seat.index}`);
-    send({ type: 'PickCard', seat: seat.index, cardId: d.cardId });
+    console.log(`  [指名] ${nameOf(seat.index)} → ${nameOf(d.target)} (${d.source})`);
+    send({ type: 'PickTarget', seat: seat.index, target: d.target });
   }
   send({ type: 'Tick' });
   for (const r of state.revealed.filter((x) => x.setNo === set)) {
     const card = state.scenario.characters.flatMap((c) => c.cards).find((c) => c.id === r.cardId)!;
-    console.log(`  [公開] ${nameOf(r.seat)}「${card.title}」`);
+    console.log(`  [公開] ${nameOf(r.by)}の指名で ${nameOf(r.seat)}「${card.title}」`);
   }
   for (let round = 0; round < rounds; round++) {
     for (const seat of state.seats) {

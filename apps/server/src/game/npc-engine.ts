@@ -1,7 +1,7 @@
 import { projectView, type RoomError, type RoomEvent, type RoomState } from '@mm/game-core';
 import {
   Budget,
-  decidePick,
+  decideTarget,
   pickPersona,
   decideTalk,
   decideVote,
@@ -61,11 +61,11 @@ export class NpcEngine {
     for (const seat of npcSeats) {
       if (state.phase === 'REVEAL' && state.picks[seat.index] === undefined) {
         this.once(room, `pick:${state.setNo}:${seat.index}`, async () => {
-          const d = await decidePick(
+          const d = await decideTarget(
             this.deps(room, seat.index),
             projectView(state, seat.index, this.now()),
           );
-          await dispatch({ type: 'PickCard', seat: seat.index, cardId: d.cardId });
+          await dispatch({ type: 'PickTarget', seat: seat.index, target: d.target });
         });
       } else if (state.phase === 'VOTE' && state.votes[seat.index] === undefined) {
         this.once(room, `vote:${seat.index}`, async () => {

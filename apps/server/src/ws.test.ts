@@ -275,11 +275,11 @@ describe('WebSocket：4人で最後まで遊ぶ', () => {
     });
 
     for (let set = 1; set <= 3; set++) {
-      // 各自、未公開の手札から1枚を選ぶ
+      // 各自、手札を公開させる相手を指名する
       await all(async (c) => {
-        const card = c.lastView().me.cards.find((x) => !x.revealed)!;
+        const target = c.lastView().pickableSeats[0]!;
         const next = c.nextView(phaseIs('TALK', set));
-        c.send({ type: 'pickCard', cardId: card.id });
+        c.send({ type: 'pickTarget', target });
         await next;
       });
       // 4枚が同時に公開されている
@@ -359,7 +359,7 @@ describe('WebSocket：観戦とレート制限', () => {
     for (const c of clients) c.send({ type: 'ready' });
     await Promise.all(clients.map((c) => c.nextView((v) => v.phase === 'REVEAL')));
     for (const c of clients) {
-      c.send({ type: 'pickCard', cardId: c.lastView().me.cards[0]!.id });
+      c.send({ type: 'pickTarget', target: c.lastView().pickableSeats[0]! });
     }
     await Promise.all(clients.map((c) => c.nextView((v) => v.phase === 'TALK')));
 
@@ -407,11 +407,7 @@ describe('WebSocket：再接続', () => {
       for (const s of [0, 1, 2, 3]) await rooms.dispatch(roomId, { type: 'Ready', seat: s });
     }
     for (const s of [0, 1, 2, 3]) {
-      const state = rooms.getState(roomId)!.state;
-      const character = state.scenario.characters.find(
-        (c) => c.id === state.seats[s]!.characterId,
-      )!;
-      await rooms.dispatch(roomId, { type: 'PickCard', seat: s, cardId: character.cards[0]!.id });
+      await rooms.dispatch(roomId, { type: 'PickTarget', seat: s, target: (s + 1) % 4 });
     }
     first.send({ type: 'chat', body: '切断前の発言' });
     await first.waitFor(

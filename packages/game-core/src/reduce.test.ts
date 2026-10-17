@@ -15,7 +15,7 @@ import {
   newRoom,
   playToVote,
 } from './fixtures';
-import { createRoom, partnerOf, reduce } from './index';
+import { createRoom, partnerOf, pickableSeats, reduce } from './index';
 import type { RoomEvent, RoomState } from './types';
 
 const sec = (s: number) => s * 1000;
@@ -82,30 +82,28 @@ describe('通しの進行（全員が人間）', () => {
     ]);
   });
 
-  it('各セットで4枚が同時に公開され、3セットで12枚、各人1枚が残る', () => {
+  it('各セットで4枚が同時に公開され、3セットで12枚。指名された人の手札が公開される', () => {
     let s = allReady(allReady(newRoom(), T0 + 1), T0 + 1);
     expect(s.phase).toBe('REVEAL');
 
     for (let set = 1; set <= 3; set++) {
       expect(s.setNo).toBe(set);
-      // 3人が選んでも、まだ公開されない
+      // 各席が、次の席を指名する。3人が指名しても、まだ公開されない
       for (const seat of [0, 1, 2]) {
-        const ch = s.seats[seat]!.characterId;
-        const card = s.scenario.characters
-          .find((c) => c.id === ch)!
-          .cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-        s = apply(s, { type: 'PickCard', seat, cardId: card.id }, T0 + 10).state;
+        s = apply(s, { type: 'PickTarget', seat, target: (seat + 1) % 4 }, T0 + 10).state;
       }
       expect(s.phase).toBe('REVEAL');
       expect(s.revealed).toHaveLength((set - 1) * 4);
-      // 最後の1人が選ぶと同時に公開される
-      const last = s.seats[3]!;
-      const card = s.scenario.characters
-        .find((c) => c.id === last.characterId)!
-        .cards.find((c) => !s.revealed.some((r) => r.cardId === c.id))!;
-      s = apply(s, { type: 'PickCard', seat: 3, cardId: card.id }, T0 + 10).state;
+      // 最後の1人が指名すると同時に公開される
+      s = apply(s, { type: 'PickTarget', seat: 3, target: 0 }, T0 + 10).state;
       expect(s.phase).toBe('TALK');
       expect(s.revealed).toHaveLength(set * 4);
+      const thisSet = s.revealed.filter((r) => r.setNo === set);
+      for (const seat of SEATS) {
+        const r = thisSet.find((x) => x.by === seat)!;
+        expect(r.seat).toBe((seat + 1) % 4);
+        expect(r.auto).toBe(false);
+      }
 
       s = allAgreeEnd(s, T0 + 20);
     }
@@ -115,6 +113,36 @@ describe('通しの進行（全員が人間）', () => {
     for (const seat of SEATS) {
       expect(s.revealed.filter((r) => r.seat === seat)).toHaveLength(3);
     }
+  });
+
+  it('同じ人が複数人に指名されると、別々のカードが1枚ずつ公開される', () => {
+    let s = allReady(allReady(newRoom(), T0), T0);
+    for (const seat of [1, 2, 3])
+      s = apply(s, { type: 'PickTarget', seat, target: 0 }, T0 + 1).state;
+    s = apply(s, { type: 'PickTarget', seat: 0, target: 1 }, T0 + 1).state;
+    expect(s.phase).toBe('TALK');
+    const onZero = s.revealed.filter((r) => r.seat === 0);
+    expect(onZero).toHaveLength(3);
+    expect(new Set(onZero.map((r) => r.cardId)).size).toBe(3);
+    expect(s.revealed.filter((r) => r.seat === 1)).toHaveLength(1);
+  });
+
+  it('指名先の手札が尽きていた場合は、別の人に振り替えられる', () => {
+    const s0 = allReady(allReady(newRoom(), T0), T0);
+    // 席1の手札を、すべて公開済みにする
+    const s = structuredClone(s0);
+    const ch = s.scenario.characters.find((c) => c.id === s.seats[1]!.characterId)!;
+    ch.cards.forEach((c) =>
+      s.revealed.push({ setNo: 0, seat: 1, cardId: c.id, by: 0, auto: false }),
+    );
+    s.picks[0] = 1; // 保存時には残っていた指名
+
+    const r = reduce(s, { type: 'Tick' }, ctx(T0 + sec(CONFIG.REVEAL_SEC) + 1));
+    const fromZero = r.state.revealed.filter((x) => x.by === 0 && x.setNo === s.setNo);
+    expect(fromZero).toHaveLength(1);
+    expect(fromZero[0]!.seat).not.toBe(1);
+    expect(fromZero[0]!.seat).not.toBe(0);
+    expect(fromZero[0]!.auto).toBe(true);
   });
 
   it('発言は TALK 中のみ。前後の空白は除かれ、記録される', () => {
@@ -235,17 +263,17 @@ describe('時間切れ', () => {
     expect(r.effects.map((e) => e.type)).toContain('MarkPlayed');
   });
 
-  it('公開カードを選ばなかった席は、未公開の手札から自動で1枚が公開される', () => {
+  it('指名しなかった席は、指名できる人からランダムに指名したことになる', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
-    s = apply(s, { type: 'PickCard', seat: 0, cardId: cardOf(s, 0, 0) }, T0 + 1).state;
+    s = apply(s, { type: 'PickTarget', seat: 0, target: 1 }, T0 + 1).state;
     const r = reduce(s, { type: 'Tick' }, ctx(T0 + sec(CONFIG.REVEAL_SEC) + 1));
     expect(r.state.phase).toBe('TALK');
     expect(r.state.revealed).toHaveLength(4);
-    expect(r.state.revealed.find((x) => x.seat === 0)?.auto).toBe(false);
+    expect(r.state.revealed.find((x) => x.by === 0)?.auto).toBe(false);
     expect(r.state.revealed.filter((x) => x.auto)).toHaveLength(3);
   });
 
-  it('自動公開でも、公開済みのカードは選ばれない', () => {
+  it('全員が時間切れでも、公開済みのカードは選ばれない', () => {
     let s = allReady(allReady(newRoom(), T0), T0);
     let now = T0;
     for (let set = 1; set <= 3; set++) {
@@ -294,11 +322,6 @@ describe('時間切れ', () => {
   });
 });
 
-function cardOf(state: RoomState, seat: number, k: number): string {
-  const ch = state.scenario.characters.find((c) => c.id === state.seats[seat]!.characterId)!;
-  return ch.cards[k]!.id;
-}
-
 describe('不正な操作', () => {
   const expectRejected = (state: RoomState, event: RoomEvent, code: string) => {
     const r = reduce(state, event, ctx(T0 + 1));
@@ -309,29 +332,31 @@ describe('不正な操作', () => {
 
   it('フェーズ違いの操作は拒否される', () => {
     const s = newRoom();
-    expectRejected(s, { type: 'PickCard', seat: 0, cardId: 'card-A1' }, 'wrong_phase');
+    expectRejected(s, { type: 'PickTarget', seat: 0, target: 1 }, 'wrong_phase');
     expectRejected(s, { type: 'Chat', seat: 0, body: 'x' }, 'wrong_phase');
     expectRejected(s, { type: 'Vote', seat: 0, target: 1 }, 'wrong_phase');
     expectRejected(s, { type: 'AgreeEndTalk', seat: 0 }, 'wrong_phase');
     expectRejected(s, { type: 'Close' }, 'wrong_phase');
   });
 
-  it('他人のカード、存在しないカード、選択済みの再選択は拒否される', () => {
+  it('自分自身、存在しない席、指名済みの再指名は拒否される', () => {
     const s = allReady(allReady(newRoom(), T0), T0);
-    const other = cardOf(s, 1, 0);
-    expectRejected(s, { type: 'PickCard', seat: 0, cardId: other }, 'invalid_card');
-    expectRejected(s, { type: 'PickCard', seat: 0, cardId: 'nope' }, 'invalid_card');
+    expectRejected(s, { type: 'PickTarget', seat: 0, target: 0 }, 'invalid_target');
+    expectRejected(s, { type: 'PickTarget', seat: 0, target: 9 }, 'invalid_target');
+    expectRejected(s, { type: 'PickTarget', seat: 0, target: 1.5 }, 'invalid_target');
 
-    const picked = apply(s, { type: 'PickCard', seat: 0, cardId: cardOf(s, 0, 0) }, T0 + 1).state;
-    expectRejected(picked, { type: 'PickCard', seat: 0, cardId: cardOf(s, 0, 1) }, 'already_done');
+    const picked = apply(s, { type: 'PickTarget', seat: 0, target: 1 }, T0 + 1).state;
+    expectRejected(picked, { type: 'PickTarget', seat: 0, target: 2 }, 'already_done');
   });
 
-  it('公開済みのカードは、次のセットで選べない', () => {
-    let s = allPick(allReady(allReady(newRoom(), T0), T0), T0);
-    const firstRevealed = s.revealed.find((r) => r.seat === 0)!.cardId;
-    s = allAgreeEnd(s, T0 + 1);
-    expect(s.phase).toBe('REVEAL');
-    expectRejected(s, { type: 'PickCard', seat: 0, cardId: firstRevealed }, 'invalid_card');
+  it('未公開の手札が残っていない人は、指名できない', () => {
+    const s = structuredClone(allReady(allReady(newRoom(), T0), T0));
+    const ch = s.scenario.characters.find((c) => c.id === s.seats[1]!.characterId)!;
+    ch.cards.forEach((c) =>
+      s.revealed.push({ setNo: 0, seat: 1, cardId: c.id, by: 0, auto: false }),
+    );
+    expect(pickableSeats(s, 0)).toEqual([2, 3]);
+    expectRejected(s, { type: 'PickTarget', seat: 0, target: 1 }, 'invalid_target');
   });
 
   it('空・長すぎる発言は拒否される', () => {
@@ -380,10 +405,10 @@ describe('NPCの席', () => {
   it('公開と投票は全席（NPC含む）が揃うのを待つ。NPCが入力すれば進む', () => {
     let s = newRoom(1);
     s = apply(apply(s, { type: 'Ready', seat: 0 }, T0).state, { type: 'Ready', seat: 0 }, T0).state;
-    s = apply(s, { type: 'PickCard', seat: 0, cardId: cardOf(s, 0, 0) }, T0 + 1).state;
-    expect(s.phase).toBe('REVEAL'); // NPC が未選択
+    s = apply(s, { type: 'PickTarget', seat: 0, target: 1 }, T0 + 1).state;
+    expect(s.phase).toBe('REVEAL'); // NPC が未指名
     for (const seat of [1, 2, 3]) {
-      s = apply(s, { type: 'PickCard', seat, cardId: cardOf(s, seat, 0) }, T0 + 2).state;
+      s = apply(s, { type: 'PickTarget', seat, target: (seat + 1) % 4 }, T0 + 2).state;
     }
     expect(s.phase).toBe('TALK');
   });

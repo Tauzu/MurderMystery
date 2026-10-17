@@ -85,8 +85,8 @@ export async function wsRoutes(app: FastifyInstance) {
       switch (msg.type) {
         case 'ready':
           return { type: 'Ready', seat: seatIndex };
-        case 'pickCard':
-          return { type: 'PickCard', seat: seatIndex, cardId: msg.cardId };
+        case 'pickTarget':
+          return { type: 'PickTarget', seat: seatIndex, target: msg.target };
         case 'chat':
           return { type: 'Chat', seat: seatIndex, body: msg.body };
         case 'agreeEndTalk':

@@ -46,7 +46,9 @@ export interface RevealedCard {
   setNo: number;
   seat: number;
   cardId: string;
-  /** 時間切れで自動的に選ばれたか */
+  /** 指名した席 */
+  by: number;
+  /** 時間切れや、指名先の手札が尽きたことで、自動的に決まった指名か */
   auto: boolean;
 }
 
@@ -84,8 +86,8 @@ export interface RoomState {
   seats: Seat[];
   /** INTRO / CONFIRM で「次へ」を押した席 */
   ready: number[];
-  /** REVEAL で選択済みのカード（席 → カードID）。同時公開まで他者には見せない */
-  picks: Record<number, string>;
+  /** REVEAL で指名済みの席（指名した席 → 指名された席）。同時公開まで他者には見せない */
+  picks: Record<number, number>;
   revealed: RevealedCard[];
   /** TALK で「話し終えた」に同意した席 */
   agreedEnd: number[];
@@ -101,7 +103,7 @@ export interface RoomState {
 
 export type RoomEvent =
   | { type: 'Ready'; seat: number }
-  | { type: 'PickCard'; seat: number; cardId: string }
+  | { type: 'PickTarget'; seat: number; target: number }
   | { type: 'Chat'; seat: number; body: string }
   | { type: 'AgreeEndTalk'; seat: number }
   | { type: 'NpcTyping'; seat: number; typing: boolean }
@@ -121,13 +123,7 @@ export type Effect =
   | { type: 'Aborted' };
 
 export interface RoomError {
-  code:
-    | 'wrong_phase'
-    | 'invalid_seat'
-    | 'invalid_card'
-    | 'already_done'
-    | 'invalid_target'
-    | 'invalid_body';
+  code: 'wrong_phase' | 'invalid_seat' | 'already_done' | 'invalid_target' | 'invalid_body';
   message: string;
 }
 
