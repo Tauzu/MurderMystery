@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { pickableSeats } from '@mm/game-core';
 import type { LlmClient, LlmRequest } from '@mm/npc';
 import { CONFIG } from '@mm/shared';
 import { Redis } from 'ioredis';
@@ -101,9 +102,8 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
 
     for (let set = 1; set <= 3; set++) {
       // 人間が公開カードを選ぶと、NPC席もAIの判断で選び、全員が揃って会話へ進む
-      const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-      const open = mine.cards.find((c) => !state().revealed.some((r) => r.cardId === c.id))!;
-      await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: open.id });
+      const target = pickableSeats(state(), 0)[0]!;
+      await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target });
       await mgr.tickAll();
       await settle();
       await mgr.tickAll();
@@ -151,8 +151,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const state = () => mgr.getState(roomId)!.state;
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();
@@ -186,8 +185,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const state = () => mgr.getState(roomId)!.state;
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();
@@ -216,8 +214,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const state = () => mgr.getState(roomId)!.state;
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();
@@ -250,8 +247,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const state = () => mgr.getState(roomId)!.state;
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();
@@ -278,8 +274,17 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const roomId = await startOneHumanGame(mgr);
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
+    await mgr.tickAll();
+    // 3人のNPCがそれぞれ話し始めるまで、時間を進める
+    await mgr.tickAll();
+    for (let i = 0; i < 12 && calls.length < 3; i++) {
+      advance(CONFIG.NPC_TALK_INTERVAL_SEC[1] + 1);
+      await mgr.tickAll();
+      await settle();
+    }
 
     const { state } = mgr.getState(roomId)!;
     const asked = calls.map((c) => c.user);
@@ -293,6 +298,8 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
         for (const card of other.cards) {
           // 犯人は、他人の手札にある捏造カードを知っている（仕様書 §4.3.1）
           if (card.isFabricated && own.isCulprit) continue;
+          // 公開済みのカードは全員が見ている
+          if (state.revealed.some((r) => r.cardId === card.id)) continue;
           expect(prompt).not.toContain(card.body);
         }
       }
@@ -307,8 +314,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
 
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();
@@ -331,8 +337,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     const state = () => mgr.getState(roomId)!.state;
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
     await mgr.dispatch(roomId, { type: 'Ready', seat: 0 });
-    const mine = state().scenario.characters.find((c) => c.id === state().seats[0]!.characterId)!;
-    await mgr.dispatch(roomId, { type: 'PickCard', seat: 0, cardId: mine.cards[0]!.id });
+    await mgr.dispatch(roomId, { type: 'PickTarget', seat: 0, target: 1 });
     await mgr.tickAll();
     await settle();
     await mgr.tickAll();

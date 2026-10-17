@@ -5,7 +5,7 @@ import { Budget } from './budget';
 import {
   copiesSecret,
   similarity,
-  decidePick,
+  decideTarget,
   decideTalk,
   decideVote,
   FILLER_LINES,
@@ -89,21 +89,22 @@ describe('プロンプト：知り得る情報だけを含む', () => {
         expect(text).not.toContain('【捏造カード】');
       }
     }
-    // 持ち主は、自分の手札として普通に見る
-    expect(talkPrompt(viewOf(0))).toContain(
-      '〈証拠品〉「TITLE-A4」（未公開）：SECRET-CARD-BODY-A4',
-    );
+    // 持ち主のプロンプトに、手札の一覧は入らない（内容は状況文に含まれる）
+    expect(talkPrompt(viewOf(0))).not.toContain('手札：');
+    expect(talkPrompt(viewOf(0))).not.toContain('SECRET-CARD-BODY-A4');
   });
 
-  it('捏造カードが犯人の手札にあれば、手札に印が付き、公開の指示が入る', () => {
+  it('捏造カードが犯人の手札にあれば、本人に伝え、指名の指示が入る', () => {
     const state = orderedRoom();
     for (const ch of state.scenario.characters) {
       for (const card of ch.cards) card.isFabricated = card.id === 'card-C1';
     }
     state.phase = 'REVEAL';
     const view = projectView(state, 2, T0);
-    expect(talkPrompt(view)).toContain('「TITLE-C1」（未公開）【捏造カード】');
-    expect(pickPrompt(view)).toContain('捏造カードは、疑いをそらすのに役立つ時点で出して');
+    expect(talkPrompt(view)).toContain('あなたの手札にある〈');
+    expect(talkPrompt(view)).toContain('「TITLE-C1」');
+    expect(talkPrompt(view)).toContain('これはあなたが作った嘘です');
+    expect(pickPrompt(view)).toContain('捏造カードの持ち主を指名すれば');
   });
 
   it('全員に、捏造カードが1枚あるというルールが入る', () => {
@@ -143,9 +144,10 @@ describe('プロンプト：知り得る情報だけを含む', () => {
 
   it('公開済みカードは本文ごと入る', () => {
     const state = orderedRoom();
-    state.revealed.push({ setNo: 1, seat: 0, cardId: 'card-A1', auto: false });
-    const text = talkPrompt(projectView(state, 1, T0));
+    state.revealed.push({ setNo: 1, seat: 0, cardId: 'card-A1', by: 1, auto: false });
+    const text = talkPrompt(projectView(state, 2, T0));
     expect(text).toContain('SECRET-CARD-BODY-A1');
+    expect(text).toContain('名前Bの指名で、名前Aの手札から公開');
   });
 });
 
@@ -233,28 +235,48 @@ describe('decideTalk', () => {
   });
 });
 
-describe('decidePick', () => {
-  it('未公開カードのIDを返す', async () => {
-    const { llm } = mockLlm(['{"cardId": "card-B3"}']);
-    expect(await decidePick(deps(llm), viewOf(1))).toEqual({ cardId: 'card-B3', source: 'ai' });
-  });
-
-  it('公開済み・存在しないIDならランダム選択に切り替える', async () => {
+describe('decideTarget', () => {
+  /** 第2回の REVEAL の状態から、席 seat が見る */
+  function viewAtSet2(seat: number) {
     const state = orderedRoom();
     state.phase = 'REVEAL';
-    state.revealed.push({ setNo: 1, seat: 1, cardId: 'card-B1', auto: false });
+    state.setNo = 2;
+    return projectView(state, seat, T0);
+  }
+
+  it('第1回は手がかりが無いので、AIを呼ばずにランダムで指名する', async () => {
+    const { llm, calls } = mockLlm(['{"target": 2}']);
+    const r = await decideTarget(deps(llm), viewOf(1));
+    expect(r.source).toBe('random');
+    expect(r.target).not.toBe(1);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('第2回以降は、指名できる席の番号を返す', async () => {
+    const { llm } = mockLlm(['{"target": 2}']);
+    expect(await decideTarget(deps(llm), viewAtSet2(1))).toEqual({ target: 2, source: 'ai' });
+  });
+
+  it('自分・存在しない席・手札が尽きた席ならランダム指名に切り替える', async () => {
+    const state = orderedRoom();
+    state.phase = 'REVEAL';
+    state.setNo = 2;
+    for (const c of state.scenario.characters[3]!.cards) {
+      state.revealed.push({ setNo: 1, seat: 3, cardId: c.id, by: 0, auto: false });
+    }
     const view = projectView(state, 1, T0);
-    for (const bad of ['card-B1', 'card-A1', 'nonsense']) {
-      const { llm } = mockLlm([JSON.stringify({ cardId: bad })]);
-      const r = await decidePick(deps(llm), view);
+    expect(view.pickableSeats).toEqual([0, 2]);
+    for (const bad of [1, 3, 9, 'x']) {
+      const { llm } = mockLlm([JSON.stringify({ target: bad })]);
+      const r = await decideTarget(deps(llm), view);
       expect(r.source).toBe('fallback');
-      expect(['card-B2', 'card-B3', 'card-B4']).toContain(r.cardId);
+      expect([0, 2]).toContain(r.target);
     }
   });
 
-  it('API失敗でもランダムで選べる', async () => {
+  it('API失敗でもランダムで指名できる', async () => {
     const { llm } = mockLlm([new Error('down')]);
-    expect((await decidePick(deps(llm), viewOf(1))).source).toBe('fallback');
+    expect((await decideTarget(deps(llm), viewAtSet2(1))).source).toBe('fallback');
   });
 });
 

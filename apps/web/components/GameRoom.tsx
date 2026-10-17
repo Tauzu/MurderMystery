@@ -185,27 +185,6 @@ function FabricatedBadge({ view, cardId }: { view: RoomView; cardId: string }) {
   return <span className="badge danger">捏造</span>;
 }
 
-function HandCards({ view }: { view: RoomView }) {
-  return (
-    <>
-      <h3>手札</h3>
-      <div style={{ display: 'grid', gap: 8 }}>
-        {view.me.cards.map((c) => (
-          <div key={c.id} className={`card ${c.revealed ? 'revealed' : ''}`}>
-            <h4>
-              <KindLabel kind={c.kind} />
-              {c.title}
-              {c.revealed && <span className="badge">公開済み</span>}
-              <FabricatedBadge view={view} cardId={c.id} />
-            </h4>
-            <div className="prose">{c.body}</div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-}
-
 function CulpritNotice({ view }: { view: RoomView }) {
   if (!view.me.isCulprit) return null;
   const f = view.me.fabricatedCard;
@@ -218,7 +197,7 @@ function CulpritNotice({ view }: { view: RoomView }) {
       {f && f.seat === view.me.seat && (
         <p className="muted">
           手札の「{f.card.title}」は、あなたが作った<strong>捏造カード</strong>
-          です。出すかどうか、いつ出すかはあなたが決められます。
+          です。公開されるかどうかは、他の人の指名で決まります。
         </p>
       )}
       {f && f.seat !== view.me.seat && (
@@ -250,12 +229,11 @@ function MyPanel({ view }: { view: RoomView }) {
         <summary>自分の状況（クリックで開く）</summary>
         <p className="prose">{view.me.situationText}</p>
       </details>
-      <HandCards view={view} />
     </div>
   );
 }
 
-/** 確認フェーズ。自分の状況文と手札を、画面いっぱいに出す。 */
+/** 確認フェーズ。自分の状況文を、画面いっぱいに出す。 */
 function ConfirmScreen({
   socket,
   view,
@@ -273,9 +251,8 @@ function ConfirmScreen({
       <CulpritNotice view={view} />
       <h3>あなただけが知っている状況</h3>
       <p className="prose">{view.me.situationText}</p>
-      <HandCards view={view} />
       <p className="muted">
-        手札は、会話のあと1枚ずつ全員に公開していきます。読み終えたら「準備完了」を押してください。
+        あなたの手札4枚（目撃証言2枚・証拠品2枚）の内容は、上の状況にすべて含まれています。手札は画面には出ません。セットごとに、他の人があなたを指名すると、そのうちのランダムな1枚が全員に公開されます。読み終えたら「準備完了」を押してください。
       </p>
       <ReadyButton socket={socket} view={view} label="準備完了" disabled={disabled} />
     </div>
@@ -288,7 +265,7 @@ function SeatsPanel({ view }: { view: RoomView }) {
     if (view.phase === 'INTRO' || view.phase === 'CONFIRM') {
       if (view.readySeats.includes(seat)) out.push('準備完了');
     }
-    if (view.phase === 'REVEAL' && view.pickedSeats.includes(seat)) out.push('選択済み');
+    if (view.phase === 'REVEAL' && view.pickedSeats.includes(seat)) out.push('指名済み');
     if (view.phase === 'TALK' && view.agreedEndSeats.includes(seat)) out.push('話し終えた');
     if (view.phase === 'VOTE' && view.votedSeats.includes(seat)) out.push('投票済み');
     return out;
@@ -364,7 +341,9 @@ function RevealedPanel({ view, nameOf }: { view: RoomView; nameOf: (seat: number
                 <h4>
                   <KindLabel kind={r.card.kind} />
                   {r.card.title}
-                  <span className="badge">{byPerson ? `第${r.setNo}セット` : nameOf(r.seat)}</span>
+                  <span className="badge">
+                    {byPerson ? `第${r.setNo}セット` : nameOf(r.seat)}・{nameOf(r.by)}の指名
+                  </span>
                   <FabricatedBadge view={view} cardId={r.card.id} />
                 </h4>
                 <div className="prose">{r.card.body}</div>
@@ -398,7 +377,7 @@ function PhaseMain({
     case 'CONFIRM':
       return <ConfirmScreen socket={socket} view={view} disabled={disabled} />;
     case 'REVEAL':
-      return <RevealPick socket={socket} view={view} disabled={disabled} />;
+      return <RevealPick socket={socket} view={view} nameOf={nameOf} disabled={disabled} />;
     case 'TALK':
       return <Talk socket={socket} view={view} nameOf={nameOf} disabled={disabled} />;
     case 'VOTE':
@@ -433,46 +412,51 @@ function ReadyButton({
 function RevealPick({
   socket,
   view,
+  nameOf,
   disabled,
 }: {
   socket: GameSocket;
   view: RoomView;
+  nameOf: (seat: number) => string;
   disabled: boolean;
 }) {
-  const [selected, setSelected] = useState<string | null>(null);
-  const available = view.me.cards.filter((c) => !c.revealed);
+  const [selected, setSelected] = useState<number | null>(null);
   const done = view.myPick !== null;
+  const chosen = done ? view.myPick : selected;
 
   return (
     <div className="panel">
-      <h2>公開するカードを1枚選んでください</h2>
+      <h2>手札を公開させる人を1人指名してください</h2>
       <p className="muted">
-        全員が選ぶか時間切れになると、4枚が同時に公開されます。カードは原則として事実ですが、全16枚のうち1枚だけ捏造カードがあります。
+        全員が指名するか時間切れになると、指名された人の未公開の手札からランダムに1枚ずつが、同時に公開されます。カードは原則として事実ですが、全16枚のうち1枚だけ捏造カードがあります。
       </p>
       <div className="cards" style={{ marginBottom: 12 }}>
-        {available.map((c) => {
-          const chosen = done ? view.myPick === c.id : selected === c.id;
-          return (
-            <div
-              key={c.id}
-              className={`card selectable ${chosen ? 'selected' : ''}`}
-              onClick={() => !done && !disabled && setSelected(c.id)}
-            >
-              <h4>
-                <KindLabel kind={c.kind} />
-                {c.title}
-                <FabricatedBadge view={view} cardId={c.id} />
-              </h4>
-              <div className="prose">{c.body}</div>
-            </div>
-          );
-        })}
+        {view.seats
+          .filter((s) => s.seat !== view.me.seat)
+          .map((s) => {
+            const left = 4 - view.revealed.filter((r) => r.seat === s.seat).length;
+            const pickable = view.pickableSeats.includes(s.seat);
+            return (
+              <div
+                key={s.seat}
+                className={`card selectable ${chosen === s.seat ? 'selected' : ''}`}
+                style={pickable ? undefined : { opacity: 0.5 }}
+                onClick={() => pickable && !done && !disabled && setSelected(s.seat)}
+              >
+                <h4>{nameOf(s.seat)}</h4>
+                <div className="prose">{s.publicProfile}</div>
+                <p className="muted">
+                  {pickable ? `未公開の手札：${left}枚` : '公開できる手札が残っていません'}
+                </p>
+              </div>
+            );
+          })}
       </div>
       <button
-        disabled={disabled || done || !selected}
-        onClick={() => selected && socket.send({ type: 'pickCard', cardId: selected })}
+        disabled={disabled || done || selected === null}
+        onClick={() => selected !== null && socket.send({ type: 'pickTarget', target: selected })}
       >
-        {done ? '他の人を待っています…' : 'このカードを公開する'}
+        {done ? '他の人を待っています…' : 'この人を指名する'}
       </button>
     </div>
   );

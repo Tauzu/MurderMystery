@@ -9,7 +9,7 @@ import { createRoom, projectView, reduce, type RoomEvent, type RoomState } from 
 import {
   Budget,
   createAnthropicClient,
-  decidePick,
+  decideTarget,
   decideTalk,
   decideVote,
   pickPersona,
@@ -129,8 +129,8 @@ async function playGame(): Promise<Outcome> {
   for (let i = 0; i < 2; i++) for (const s of state.seats) send({ type: 'Ready', seat: s.index });
   for (let set = 1; set <= 3; set++) {
     for (const s of state.seats) {
-      const d = await decidePick(depsOf(s.index), view(s.index));
-      send({ type: 'PickCard', seat: s.index, cardId: d.cardId });
+      const d = await decideTarget(depsOf(s.index), view(s.index));
+      send({ type: 'PickTarget', seat: s.index, target: d.target });
     }
     send({ type: 'Tick' });
     for (let round = 0; round < rounds; round++) {

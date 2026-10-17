@@ -1,6 +1,6 @@
 import {
-  characterOf,
   createRoom,
+  pickableSeats,
   projectView,
   reduce,
   type Effect,
@@ -180,12 +180,10 @@ export class RoomManager {
     for (const seat of state.seats) {
       if (seat.kind !== 'npc') continue;
       if (state.phase === 'REVEAL' && state.picks[seat.index] === undefined) {
-        const open = characterOf(state, seat).cards.filter(
-          (c) => !state.revealed.some((r) => r.cardId === c.id),
-        );
-        const card = open[Math.floor(this.rng() * open.length)];
-        if (card) {
-          await this.dispatch(id, { type: 'PickCard', seat: seat.index, cardId: card.id });
+        const options = pickableSeats(state, seat.index);
+        const target = options[Math.floor(this.rng() * options.length)];
+        if (target !== undefined) {
+          await this.dispatch(id, { type: 'PickTarget', seat: seat.index, target });
         }
       } else if (state.phase === 'VOTE' && state.votes[seat.index] === undefined) {
         const others = state.seats.filter((x) => x.index !== seat.index);
@@ -234,6 +232,14 @@ export class RoomManager {
         st.typing ??= [];
         st.scenario.victim ??= null;
         for (const m of st.chat) m.scope ??= 'pair';
+        // 手札の公開を指名制にする前（2026-10-18）の状態は、ルールが違うので続けられない
+        if (
+          st.revealed.some((r) => r.by === undefined) ||
+          Object.values(st.picks).some((v) => typeof v !== 'number')
+        ) {
+          await redis.del(key);
+          continue;
+        }
         try {
           for (const seat of st.seats) projectView(st, seat.index, this.now());
         } catch {

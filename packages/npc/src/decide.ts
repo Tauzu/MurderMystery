@@ -17,7 +17,7 @@ export interface NpcDeps {
   onFallback?: (label: string, reason: string) => void;
 }
 
-export type Source = 'ai' | 'fallback';
+export type Source = 'ai' | 'fallback' | 'random';
 
 /** 予算切れや形式不正が続いたときにつなぐ定型文。 */
 export const FILLER_LINES = [
@@ -134,21 +134,21 @@ export async function decideTalk(
   return filler;
 }
 
-/** 公開するカードを選ぶ。失敗時は未公開カードからランダム。 */
-export async function decidePick(
+/**
+ * 手札を公開させる相手を指名する。失敗時は指名できる人からランダム。
+ * 1セット目は手がかりが無いので、AIを使わずランダムにする（費用の節約）。
+ */
+export async function decideTarget(
   deps: NpcDeps,
   view: RoomView,
-): Promise<{ cardId: string; source: Source }> {
-  const open = view.me.cards.filter((c) => !c.revealed);
-  const fallback = { cardId: pick(open, deps.rng).id, source: 'fallback' as const };
-  if (deps.budget.exhausted || open.length === 1) {
-    return open.length === 1 ? { cardId: open[0]!.id, source: 'fallback' } : fallback;
-  }
+): Promise<{ target: number; source: Source }> {
+  const options = view.pickableSeats;
+  const fallback = { target: pick(options, deps.rng), source: 'fallback' as const };
+  if (view.setNo === 1 || options.length === 1) return { ...fallback, source: 'random' };
+  if (deps.budget.exhausted) return fallback;
   try {
-    const cardId = parseJsonObject(await call(deps, view, pickPrompt(view)))?.cardId;
-    if (typeof cardId === 'string' && open.some((c) => c.id === cardId)) {
-      return { cardId, source: 'ai' };
-    }
+    const target = parseJsonObject(await call(deps, view, pickPrompt(view)))?.target;
+    if (typeof target === 'number' && options.includes(target)) return { target, source: 'ai' };
   } catch (e) {
     deps.onError?.('pick', e);
   }

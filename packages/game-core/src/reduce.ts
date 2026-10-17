@@ -86,19 +86,20 @@ function applyEvent(
       return null;
     }
 
-    case 'PickCard': {
+    case 'PickTarget': {
       if (state.phase !== 'REVEAL') return wrongPhase();
       const seat = state.seats[event.seat];
       if (!seat) return err('invalid_seat', '席が不正です');
-      if (state.picks[seat.index] !== undefined) {
-        return err('already_done', '公開するカードは選択済みです');
-      }
-      const card = characterOf(state, seat).cards.find((c) => c.id === event.cardId);
-      if (!card || state.revealed.some((r) => r.cardId === card.id)) {
-        return err('invalid_card', '公開できないカードです');
+      if (state.picks[seat.index] !== undefined) return err('already_done', '指名済みです');
+      if (
+        !Number.isInteger(event.target) ||
+        event.target === seat.index ||
+        !pickableSeats(state, seat.index).includes(event.target)
+      ) {
+        return err('invalid_target', '指名できない相手です');
       }
       touch(seat, ctx);
-      state.picks[seat.index] = card.id;
+      state.picks[seat.index] = event.target;
       return null;
     }
 
@@ -308,22 +309,43 @@ function enterReveal(state: RoomState, setNo: number, ctx: Context) {
   state.deadlineAt = ctx.now + sec(CONFIG.REVEAL_SEC);
 }
 
-/** 4人分のカードを同時に公開する。未選択の席は、未公開の手札からランダムに1枚。 */
+/** 席 seatIndex の、まだ公開されていない手札。 */
+function unrevealedCards(state: RoomState, seatIndex: number) {
+  return characterOf(state, state.seats[seatIndex]!).cards.filter(
+    (c) => !state.revealed.some((r) => r.cardId === c.id),
+  );
+}
+
+/** seatIndex が指名できる席（自分以外で、未公開の手札が残る席）。 */
+export function pickableSeats(state: RoomState, seatIndex: number): number[] {
+  return state.seats
+    .map((s) => s.index)
+    .filter((i) => i !== seatIndex && unrevealedCards(state, i).length > 0);
+}
+
+/**
+ * 指名された人の未公開の手札からランダムに1枚ずつ、4件を同時に公開する。
+ * 未指名の席は、指名できる人からランダムに指名したものとする。同じセットの他の指名で
+ * 手札が尽きた人への指名も、同様に振り替える。
+ */
 function revealAll(state: RoomState, ctx: Context) {
   for (const seat of state.seats) {
-    const picked = state.picks[seat.index];
-    let cardId = picked;
-    if (cardId === undefined) {
-      const remaining = characterOf(state, seat).cards.filter(
-        (c) => !state.revealed.some((r) => r.cardId === c.id),
-      );
-      cardId = remaining[Math.floor(ctx.rng() * remaining.length)]!.id;
+    let target = state.picks[seat.index];
+    let auto = false;
+    if (target === undefined || unrevealedCards(state, target).length === 0) {
+      const options = pickableSeats(state, seat.index);
+      if (options.length === 0) continue;
+      target = options[Math.floor(ctx.rng() * options.length)]!;
+      auto = true;
     }
+    const remaining = unrevealedCards(state, target);
+    const card = remaining[Math.floor(ctx.rng() * remaining.length)]!;
     state.revealed.push({
       setNo: state.setNo,
-      seat: seat.index,
-      cardId,
-      auto: picked === undefined,
+      seat: target,
+      cardId: card.id,
+      by: seat.index,
+      auto,
     });
   }
   state.picks = {};

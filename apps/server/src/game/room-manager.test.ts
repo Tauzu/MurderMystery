@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from '@mm/shared';
-import type { RoomEvent } from '@mm/game-core';
+import { pickableSeats, type RoomEvent } from '@mm/game-core';
 import { Redis } from 'ioredis';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { createDb } from '../db';
@@ -71,11 +71,7 @@ describe('RoomManager：全員人間で最後まで遊ぶ', () => {
     for (let set = 1; set <= 3; set++) {
       for (const seat of seats) {
         const { state } = manager.getState(roomId)!;
-        const character = state.scenario.characters.find(
-          (c) => c.id === state.seats[seat]!.characterId,
-        )!;
-        const card = character.cards.find((c) => !state.revealed.some((r) => r.cardId === c.id))!;
-        await send(roomId, { type: 'PickCard', seat, cardId: card.id });
+        await send(roomId, { type: 'PickTarget', seat, target: pickableSeats(state, seat)[0]! });
       }
       await send(roomId, { type: 'Chat', seat: set % 4, body: `セット${set}の発言` });
       for (const seat of seats) await send(roomId, { type: 'AgreeEndTalk', seat });
@@ -308,11 +304,7 @@ describe('RoomManager：NPC席の自動行動', () => {
     expect(manager.getState(roomId)?.state.phase).toBe('REVEAL');
 
     for (const seat of [0, 1]) {
-      const { state } = manager.getState(roomId)!;
-      const character = state.scenario.characters.find(
-        (c) => c.id === state.seats[seat]!.characterId,
-      )!;
-      await send(roomId, { type: 'PickCard', seat, cardId: character.cards[0]!.id });
+      await send(roomId, { type: 'PickTarget', seat, target: (seat + 1) % 4 });
     }
     // 直後はまだ待つ。NPC席の行動を待たずにタイムアウトまで放置されないことを確認する
     await manager.tickAll();
