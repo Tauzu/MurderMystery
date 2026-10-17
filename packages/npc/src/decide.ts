@@ -2,7 +2,7 @@ import type { RoomView } from '@mm/game-core';
 import { CONFIG } from '@mm/shared';
 import type { Budget } from './budget';
 import type { LlmClient } from './llm';
-import { pickPrompt, systemPrompt, talkPrompt, votePrompt } from './prompt';
+import { pickPrompt, stablePrompt, systemPrompt, talkPrompt, votePrompt } from './prompt';
 
 export interface NpcDeps {
   llm: LlmClient;
@@ -81,11 +81,19 @@ export function repeatsOwn(say: string, view: RoomView, threshold = 0.5): boolea
     .some((m) => similarity(say, m.body) >= threshold);
 }
 
+/** プロンプトの前半（ゲームを通して変わらない部分）をキャッシュの対象として切り出す。 */
+function splitStable(view: RoomView, user: string) {
+  const stable = stablePrompt(view);
+  return user.startsWith(stable)
+    ? { userStable: stable, user: user.slice(stable.length) }
+    : { user };
+}
+
 async function call(deps: NpcDeps, view: RoomView, user: string) {
   const res = await deps.llm.complete({
     model: deps.model ?? CONFIG.NPC_MODEL,
     system: systemPrompt(view.me.isCulprit, deps.persona),
-    user,
+    ...splitStable(view, user),
     maxTokens: CONFIG.NPC_MAX_OUTPUT_TOKENS,
     timeoutMs: CONFIG.NPC_AI_TIMEOUT_SEC * 1000,
   });

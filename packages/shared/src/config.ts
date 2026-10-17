@@ -23,7 +23,7 @@ export const CONFIG = {
   NPC_MODEL: 'claude-haiku-5-5',
   NPC_MAX_OUTPUT_TOKENS: 300,
   /** プロンプトに含める直近の会話件数 */
-  NPC_HISTORY_COUNT: 30,
+  NPC_HISTORY_COUNT: 16,
   /** AI呼び出しのタイムアウト */
   NPC_AI_TIMEOUT_SEC: 15,
   /** 1ゲームで使えるAIの総トークン（入力＋出力）。80%で発言間隔を延ばし、100%で定型文のみ【仮】 */

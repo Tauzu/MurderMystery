@@ -121,19 +121,24 @@ function chatBlock(view: RoomView): string {
   return blocks.join('\n\n');
 }
 
-/** シナリオと自キャラの共通部分。 */
-function context(view: RoomView): string {
-  return [
+/**
+ * プロンプトのうち、ゲームを通して変わらない前半（導入、被害者、自キャラ、捏造カード、他の参加者）。
+ * プロンプトキャッシュの対象にするため、会話のたびに変わる部分より前に置き、末尾の区切りまで含める。
+ */
+export function stablePrompt(view: RoomView): string {
+  const blocks = [
     `■ 導入\n${view.introText}`,
     victimBlock(view),
     characterBlock(view),
     fabricatedBlock(view),
     othersBlock(view),
-    revealedBlock(view),
-    chatBlock(view),
-  ]
-    .filter((block) => block !== '')
-    .join('\n\n');
+  ].filter((block) => block !== '');
+  return blocks.join('\n\n') + '\n\n';
+}
+
+/** シナリオと自キャラの共通部分。 */
+function context(view: RoomView): string {
+  return stablePrompt(view) + [revealedBlock(view), chatBlock(view)].join('\n\n');
 }
 
 export function talkPrompt(view: RoomView, avoidRepeat = false): string {
