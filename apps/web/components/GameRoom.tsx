@@ -49,10 +49,70 @@ function useSwitchNotices(view: RoomView | null): string[] {
   return notices.map((n) => n.text);
 }
 
+/** カード公開が終わって会話に移った瞬間に、そのセットで公開されたカードを知らせるため、セット番号を返す。 */
+function useRevealNotice(view: RoomView | null) {
+  const previous = useRef<{ phase: string; setNo: number } | null>(null);
+  const [setNo, setSetNo] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!view) return;
+    const before = previous.current;
+    previous.current = { phase: view.phase, setNo: view.setNo };
+    if (before?.phase === 'REVEAL' && view.phase === 'TALK') setSetNo(view.setNo);
+  }, [view]);
+
+  return [setNo, () => setSetNo(null)] as const;
+}
+
+/** いま公開された4枚を、画面の中央に出す。 */
+function RevealModal({
+  view,
+  setNo,
+  nameOf,
+  onClose,
+}: {
+  view: RoomView;
+  setNo: number;
+  nameOf: (seat: number) => string;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const cards = view.revealed.filter((r) => r.setNo === setNo).sort((a, b) => a.by - b.by);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+        <h2>第{setNo}セット：公開されたカード</h2>
+        <div className="modal-cards">
+          {cards.map((r) => (
+            <div key={r.card.id} className="card compact">
+              <p className="muted">
+                {nameOf(r.by)}の指名で、{nameOf(r.seat)}の手札から
+              </p>
+              <h4>
+                <KindLabel kind={r.card.kind} />
+                {r.card.title}
+                <FabricatedBadge view={view} cardId={r.card.id} />
+              </h4>
+              <div className="prose">{r.card.body}</div>
+            </div>
+          ))}
+        </div>
+        <button onClick={onClose}>会話を始める</button>
+      </div>
+    </div>
+  );
+}
+
 export function GameRoom({ roomId }: { roomId: string }) {
   const socket = useGameSocket(roomId);
   const { view, connection, closeReason } = socket;
   const switchNotices = useSwitchNotices(view);
+  const [revealedSet, closeReveal] = useRevealNotice(view);
   const phase = view?.phase;
   const setNo = view?.setNo;
 
@@ -78,6 +138,9 @@ export function GameRoom({ roomId }: { roomId: string }) {
     <>
       <Header socket={socket} view={view} />
       <Banners socket={socket} />
+      {revealedSet !== null && (
+        <RevealModal view={view} setNo={revealedSet} nameOf={nameOf} onClose={closeReveal} />
+      )}
       {switchNotices.map((text, i) => (
         <div key={i} className="banner">
           {text}
