@@ -23,7 +23,12 @@ const npc = apiKey
   ? new NpcEngine({
       llm: createAnthropicClient(apiKey),
       log: (message, error) =>
-        console.warn(message, error instanceof Error ? error.message : error),
+        console.warn(
+          ...[
+            message,
+            ...(error === undefined ? [] : [error instanceof Error ? error.message : error]),
+          ],
+        ),
     })
   : undefined;
 

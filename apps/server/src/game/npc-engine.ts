@@ -146,6 +146,10 @@ export class NpcEngine {
       budget: room.budget,
       persona: this.personaOf(room, seat),
       rng: this.rng,
+      onFallback: (label: string, reason: string) =>
+        this.opts.log?.(
+          `NPC(${label})が定型文に切り替え：${reason}（予算 ${room.budget.usedTokens} / ${room.budget.limit}）`,
+        ),
       onError: (label: string, e: unknown) => this.opts.log?.(`NPC(${label})のAI呼び出しに失敗`, e),
     };
   }

@@ -13,6 +13,8 @@ export interface NpcDeps {
   persona?: string;
   /** 失敗の記録など。省略可 */
   onError?: (label: string, error: unknown) => void;
+  /** AIの代わりに定型文・ランダム選択を使った理由の記録。省略可 */
+  onFallback?: (label: string, reason: string) => void;
 }
 
 export type Source = 'ai' | 'fallback';
@@ -101,8 +103,12 @@ export async function decideTalk(
   view: RoomView,
 ): Promise<{ say: string; source: Source } | null> {
   const filler = { say: pick(FILLER_LINES, deps.rng), source: 'fallback' as const };
-  if (deps.budget.exhausted) return filler;
+  if (deps.budget.exhausted) {
+    deps.onFallback?.('talk', '予算切れ');
+    return filler;
+  }
 
+  let reason = '';
   for (let attempt = 0; attempt < 2; attempt++) {
     // 2回目は、直前の発言との重複を避けるよう強く指示する
     const user = talkPrompt(view, attempt > 0);
@@ -114,17 +120,17 @@ export async function decideTalk(
       return null;
     }
     const say = parseJsonObject(text)?.say;
-    if (typeof say !== 'string') continue;
-    const trimmed = say.trim().slice(0, CONFIG.NPC_MAX_CHARS);
-    if (
-      trimmed.length === 0 ||
-      copiesSecret(trimmed, view.me.situationText) ||
-      repeatsOwn(trimmed, view)
-    ) {
+    if (typeof say !== 'string') {
+      reason = '返答がJSONの形式でない';
       continue;
     }
-    return { say: trimmed, source: 'ai' };
+    const trimmed = say.trim().slice(0, CONFIG.NPC_MAX_CHARS);
+    if (trimmed.length === 0) reason = '発言が空';
+    else if (copiesSecret(trimmed, view.me.situationText)) reason = '状況文の丸写し';
+    else if (repeatsOwn(trimmed, view)) reason = '自分の発言と重複';
+    else return { say: trimmed, source: 'ai' };
   }
+  deps.onFallback?.('talk', `2回続けて使えない返答（${reason}）`);
   return filler;
 }
 
