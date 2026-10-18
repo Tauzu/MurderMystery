@@ -6,6 +6,8 @@ export interface LlmRequest {
   system: string;
   /** user の先頭にある、ゲームを通して変わらない部分。指定するとキャッシュの対象にする（user はその続き） */
   userStable?: string;
+  /** userStable の続きで、セットが進むまで変わらない部分（公開済みカード、前の回の会話）。2つ目のキャッシュ区切り */
+  userSemiStable?: string;
   user: string;
   maxTokens: number;
   timeoutMs: number;
@@ -38,11 +40,16 @@ export function createAnthropicClient(apiKey: string): LlmClient {
               role: 'user',
               content: req.userStable
                 ? [
-                    {
-                      type: 'text',
-                      text: req.userStable,
-                      cache_control: { type: 'ephemeral' },
-                    },
+                    { type: 'text', text: req.userStable, cache_control: { type: 'ephemeral' } },
+                    ...(req.userSemiStable
+                      ? [
+                          {
+                            type: 'text' as const,
+                            text: req.userSemiStable,
+                            cache_control: { type: 'ephemeral' as const },
+                          },
+                        ]
+                      : []),
                     { type: 'text', text: req.user },
                   ]
                 : req.user,
@@ -51,6 +58,12 @@ export function createAnthropicClient(apiKey: string): LlmClient {
         },
         { timeout: req.timeoutMs },
       );
+      if (process.env.NPC_LOG_USAGE) {
+        const u = res.usage;
+        console.log(
+          `NPC usage: 入力 ${u.input_tokens} / キャッシュ書込 ${u.cache_creation_input_tokens ?? 0} / キャッシュ読取 ${u.cache_read_input_tokens ?? 0} / 出力 ${u.output_tokens}`,
+        );
+      }
       const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
       return {
         text,
