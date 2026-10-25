@@ -93,47 +93,61 @@ function revealedBlock(view: RoomView): string {
   );
 }
 
-function chatBlock(view: RoomView): string {
+/** 前の回の会話。セットが進むまで変わらないので、キャッシュの対象にできる。 */
+function pastChatBlock(view: RoomView): string {
   const name = (seat: number) => view.seats[seat]!.name;
   const line = (m: RoomView['chat'][number]) =>
     `${name(m.seat)}${m.seat === view.me.seat ? '（あなた）' : ''}：${m.body}`;
-  const pair = view.chat.filter((m) => m.scope === 'pair');
-  const current = pair.filter((m) => m.setNo === view.setNo).slice(-CONFIG.NPC_HISTORY_COUNT);
-  const past = pair.filter((m) => m.setNo < view.setNo).slice(-CONFIG.NPC_HISTORY_COUNT);
-
-  const blocks: string[] = [];
-  if (past.length > 0) {
-    blocks.push(
-      [
-        '■ 前の回の会話（別の相手との会話。古い順）',
-        ...past.map(
-          (m) => `[第${m.setNo}回・${name(partnerOf(view.me.seat, m.setNo))}との会話] ${line(m)}`,
-        ),
-      ].join('\n'),
-    );
-  }
-  const partner = name(partnerOf(view.me.seat, view.setNo));
-  blocks.push(
-    current.length === 0
-      ? `■ ${partner}との会話\n（まだ発言はありません）`
-      : [`■ ${partner}との会話（古い順）`, ...current.map(line)].join('\n'),
-  );
-  return blocks.join('\n\n');
+  const past = view.chat
+    .filter((m) => m.scope === 'pair' && m.setNo < view.setNo)
+    .slice(-CONFIG.NPC_HISTORY_COUNT);
+  if (past.length === 0) return '';
+  return [
+    '■ 前の回の会話（別の相手との会話。古い順）',
+    ...past.map(
+      (m) => `[第${m.setNo}回・${name(partnerOf(view.me.seat, m.setNo))}との会話] ${line(m)}`,
+    ),
+  ].join('\n');
 }
 
-/** シナリオと自キャラの共通部分。 */
-function context(view: RoomView): string {
-  return [
+function currentChatBlock(view: RoomView): string {
+  const name = (seat: number) => view.seats[seat]!.name;
+  const line = (m: RoomView['chat'][number]) =>
+    `${name(m.seat)}${m.seat === view.me.seat ? '（あなた）' : ''}：${m.body}`;
+  const current = view.chat
+    .filter((m) => m.scope === 'pair' && m.setNo === view.setNo)
+    .slice(-CONFIG.NPC_HISTORY_COUNT);
+  const partner = name(partnerOf(view.me.seat, view.setNo));
+  return current.length === 0
+    ? `■ ${partner}との会話\n（まだ発言はありません）`
+    : [`■ ${partner}との会話（古い順）`, ...current.map(line)].join('\n');
+}
+
+/**
+ * プロンプトのうち、ゲームを通して変わらない前半（導入、被害者、自キャラ、捏造カード、他の参加者）。
+ * プロンプトキャッシュの対象にするため、会話のたびに変わる部分より前に置き、末尾の区切りまで含める。
+ */
+export function stablePrompt(view: RoomView): string {
+  const blocks = [
     `■ 導入\n${view.introText}`,
     victimBlock(view),
     characterBlock(view),
     fabricatedBlock(view),
     othersBlock(view),
-    revealedBlock(view),
-    chatBlock(view),
-  ]
-    .filter((block) => block !== '')
-    .join('\n\n');
+  ].filter((block) => block !== '');
+  return blocks.join('\n\n') + '\n\n';
+}
+
+/**
+ * 公開済みカードと前の回の会話。次のセットに進むまで変わらないので、stablePrompt の次のキャッシュ区切りにする。
+ */
+export function setPrompt(view: RoomView): string {
+  return [revealedBlock(view), pastChatBlock(view)].filter((b) => b !== '').join('\n\n') + '\n\n';
+}
+
+/** シナリオと自キャラの共通部分。 */
+function context(view: RoomView): string {
+  return stablePrompt(view) + setPrompt(view) + currentChatBlock(view);
 }
 
 export function talkPrompt(view: RoomView, avoidRepeat = false): string {
