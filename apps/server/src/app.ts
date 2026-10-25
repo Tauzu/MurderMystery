@@ -4,11 +4,13 @@ import Fastify, { type FastifyReply, type FastifyRequest } from 'fastify';
 import type { Redis } from 'ioredis';
 import type { Db } from './db';
 import { Matchmaker } from './game/matchmaker';
+import type { LlmClient } from '@mm/npc';
 import type { NpcEngine } from './game/npc-engine';
 import { RoomManager } from './game/room-manager';
 import { authRoutes } from './routes/auth';
 import { matchRoutes } from './routes/matches';
 import { myScenarioRoutes } from './routes/my-scenarios';
+import { publishRoutes } from './routes/my-scenarios-publish';
 import { scenarioRoutes } from './routes/scenarios';
 import { wsRoutes } from './routes/ws';
 import { SESSION_COOKIE, getSessionUserId } from './session';
@@ -23,6 +25,8 @@ export interface AppOptions {
   rng?: () => number;
   /** NPC席の行動を決めるエンジン（AIを使う場合） */
   npc?: NpcEngine;
+  /** シナリオ投稿のAIチェックに使うAI。無ければチェックは使えない */
+  llm?: LlmClient;
   idleSwitchSec?: number;
   idleWarnSec?: number;
 }
@@ -32,6 +36,8 @@ export interface AppDeps {
   redis: Redis;
   secureCookies?: boolean;
   rooms: RoomManager;
+  llm?: LlmClient;
+  now: () => number;
   matchmaker: Matchmaker;
 }
 
@@ -61,6 +67,8 @@ export function buildApp(opts: AppOptions) {
     redis: opts.redis,
     secureCookies: opts.secureCookies,
     rooms,
+    llm: opts.llm,
+    now: opts.now ?? Date.now,
     matchmaker: new Matchmaker(opts.db, rooms, { now: opts.now }),
   };
   if (opts.autoTick) {
@@ -87,6 +95,7 @@ export function buildApp(opts: AppOptions) {
   app.register(authRoutes);
   app.register(scenarioRoutes);
   app.register(myScenarioRoutes);
+  app.register(publishRoutes);
   app.register(matchRoutes);
   app.register(wsRoutes);
 

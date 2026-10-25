@@ -8,6 +8,7 @@
     "start": "tsx src/main.ts",
     "eval:npc": "tsx scripts/npc-eval.ts",
     "eval:balance": "tsx scripts/npc-balance.ts",
+    "eval:check": "tsx scripts/scenario-check.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "db:generate": "prisma generate",

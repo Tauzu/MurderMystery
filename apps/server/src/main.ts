@@ -19,9 +19,10 @@ if (!apiKey) {
     'ANTHROPIC_API_KEY が未設定です。NPCは発言せず、カード公開と投票だけランダムに行います',
   );
 }
-const npc = apiKey
+const llm = apiKey ? createAnthropicClient(apiKey) : undefined;
+const npc = llm
   ? new NpcEngine({
-      llm: createAnthropicClient(apiKey),
+      llm,
       log: (message, error) =>
         console.warn(
           ...[
@@ -38,6 +39,7 @@ const app = buildApp({
   secureCookies: env.isProduction,
   autoTick: true,
   npc,
+  llm,
   idleSwitchSec: env.idleSwitchSec,
   // 警告は切替の30秒前（既定の 150秒/180秒 と同じ間隔）
   idleWarnSec: env.idleSwitchSec === undefined ? undefined : Math.max(0, env.idleSwitchSec - 30),
