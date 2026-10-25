@@ -11,6 +11,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('chat'), body: z.string().max(1000) }),
   z.object({ type: z.literal('agreeEndTalk') }),
   z.object({ type: z.literal('vote'), targetSeat: z.number().int() }),
+  z.object({ type: z.literal('active') }),
   z.object({ type: z.literal('resync') }),
   z.object({ type: z.literal('ping') }),
 ]);

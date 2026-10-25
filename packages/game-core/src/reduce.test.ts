@@ -476,6 +476,18 @@ describe('無操作によるNPCへの切替', () => {
     expect(r.effects).toEqual([]);
   });
 
+  it('画面操作の知らせ（Active）でも、無操作の時間は数え直され、警告も消える', () => {
+    let s = allPick(allReady(allReady(newRoom(), T0), T0), T0);
+    const warnAt = T0 + sec(CONFIG.IDLE_WARN_SEC);
+    s = reduce(s, { type: 'Tick' }, ctx(warnAt)).state;
+    expect(s.seats[0]?.warned).toBe(true);
+    s = apply(s, { type: 'Active', seat: 0 }, warnAt + 1000).state;
+    expect(s.seats[0]?.warned).toBe(false);
+    const r = reduce(s, { type: 'Tick' }, ctx(T0 + sec(CONFIG.IDLE_SWITCH_SEC) + 1000));
+    expect(r.state.seats[0]?.kind).toBe('human');
+    expect(r.effects.filter((e) => 'seat' in e && e.seat === 0)).toEqual([]);
+  });
+
   it('自分の操作を終えて他の人を待っている間は、無操作として数えない', () => {
     let s = newRoom();
     s = allReady(s, T0); // CONFIRM へ
