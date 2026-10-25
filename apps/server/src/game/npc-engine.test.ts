@@ -206,7 +206,7 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     expect(calls.length).toBe(callsBefore);
   });
 
-  it('相手が返事をしないうちは、同じNPCが続けて話さない', async () => {
+  it('相手が返事をしないうちは、同じNPCは間を空け、2回続けたら黙る', async () => {
     const { llm } = fakeLlm();
     // 人間が黙ったままでも、無操作で切り替わらないよう長くしておく
     const mgr = managerWith(llm, { idleSwitchSec: 100_000, idleWarnSec: 99_000 });
@@ -234,6 +234,13 @@ describe('NpcEngine：NPC席がAIで行動する', () => {
     expect(fromSeat1()).toBe(1);
 
     advance(CONFIG.NPC_FOLLOWUP_WAIT_SEC);
+    await mgr.tickAll();
+    await mgr.tickAll();
+    await settle();
+    expect(fromSeat1()).toBe(2);
+
+    // 2回続けて話したら、返事が来るまでは黙る
+    advance(CONFIG.NPC_FOLLOWUP_WAIT_SEC * 2);
     await mgr.tickAll();
     await mgr.tickAll();
     await settle();

@@ -157,7 +157,7 @@ export function talkPrompt(view: RoomView, avoidRepeat = false): string {
   const notes: string[] = [];
   if (last?.seat === view.me.seat) {
     notes.push(
-      'あなたの直前の発言に、相手はまだ返事をしていません。同じ話を繰り返さず、別の角度の質問か、新しい情報を出してください。',
+      'あなたの直前の発言に、相手はまだ返事をしていません。相手が答えた、あるいは同意・反論したかのように書かないこと（「本当にそうでしょうか」のような返事への返しは禁止）。同じ質問を言い換えて繰り返さず、まだ出していない別の事実・疑問を、独り言のように短く付け足すだけにしてください。',
     );
   }
   if (avoidRepeat) {
