@@ -25,9 +25,11 @@ const llm: LlmClient = {
 const app = buildApp({ db, redis, llm });
 const noLlmApp = buildApp({ db, redis });
 
-const { slug: _slug, ...valid } = JSON.parse(
+const valid = JSON.parse(
   readFileSync(new URL('../../../scenarios/001-yukiyama-sansou.json', import.meta.url), 'utf-8'),
 );
+// 運営シナリオ用の識別子は、投稿には要らない
+delete valid.slug;
 
 const users: string[] = [];
 
