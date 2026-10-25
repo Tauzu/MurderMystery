@@ -89,3 +89,59 @@ export function checkScenarioStructure(draft: unknown): ScenarioIssue[] {
   }
   return issues;
 }
+
+/** 不適切表現の分類。仕様書 §6.3 */
+export const MODERATION_CATEGORIES = [
+  'violence',
+  'sexual',
+  'defamation',
+  'discrimination',
+] as const;
+export type ModerationCategory = (typeof MODERATION_CATEGORIES)[number];
+
+export const MODERATION_LABELS: Record<ModerationCategory, string> = {
+  violence: '過度な残虐描写',
+  sexual: '性的表現',
+  defamation: '実在の人物・団体への誹謗',
+  discrimination: '差別的表現',
+};
+
+/** 整合性チェックで見る観点。仕様書 §6.3・設計書 §9.2 */
+export const CONSISTENCY_ASPECTS = [
+  'situation',
+  'culprit',
+  'suspects',
+  'fabricated',
+  'ending',
+  'timeline',
+] as const;
+export type ConsistencyAspect = (typeof CONSISTENCY_ASPECTS)[number];
+
+export const CONSISTENCY_LABELS: Record<ConsistencyAspect, string> = {
+  situation: '状況文と手札の対応',
+  culprit: '犯人を推理できるか',
+  suspects: '犯人以外の容疑者',
+  fabricated: '捏造カードを見破れるか',
+  ending: '結末文との矛盾',
+  timeline: '時刻・行動の矛盾',
+};
+
+/** `Scenario.checkResult` に保存するAIチェックの結果。設計書 §9.2 */
+export interface ScenarioCheckResult {
+  /** running=実行中、done=完了、error=AIの失敗（公開不可。再実行できる） */
+  status: 'running' | 'done' | 'error';
+  /** チェックした下書きのハッシュ。内容が変わったら無効 */
+  hash: string;
+  startedAt: number;
+  moderation?: {
+    /** 1つも該当しなければ true。falseなら公開不可 */
+    ok: boolean;
+    flags: { category: ModerationCategory; where: string; reason: string }[];
+  };
+  consistency?: {
+    /** 指摘があれば warn。warn でも投稿者が理解した上で公開できる */
+    verdict: 'ok' | 'warn';
+    findings: { aspect: ConsistencyAspect; message: string }[];
+  };
+  error?: string;
+}

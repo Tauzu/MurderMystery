@@ -4,4 +4,5 @@ export * from './decide';
 export * from './llm';
 export * from './persona';
 export * from './prompt';
+export * from './scenario-check';
 export * from './schedule';
