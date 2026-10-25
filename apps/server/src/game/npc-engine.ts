@@ -116,6 +116,10 @@ export class NpcEngine {
       return;
     }
 
+    // 相手が返事をしないまま自分が2回続けて話したら、返事が来るまで黙る（一人二役のようになるのを防ぐ）
+    const own = view().chat.filter((c) => c.setNo === state.setNo);
+    if (own.length >= 2 && own.slice(-2).every((c) => c.seat === seat)) return;
+
     this.once(room, `talk:${seat}`, async () => {
       // 考えている間は「入力中…」を出す。生成が早く終わっても、人間らしい間を空けてから発言する（設計書 §8.7）
       await dispatch({ type: 'NpcTyping', seat, typing: true });
