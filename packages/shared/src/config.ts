@@ -9,6 +9,9 @@ export const CONFIG = {
   RESULT_CLOSE_SEC: 1800,
   CHAT_MAX_CHARS: 200,
   CHAT_RATE_PER_SEC: 1,
+  /** 1人が持てる下書きの件数と、1件の大きさ（JSON文字数） */
+  DRAFT_MAX_COUNT: 20,
+  DRAFT_MAX_CHARS: 100_000,
   IDLE_SWITCH_SEC: 300,
   IDLE_WARN_SEC: 240,
   /** 画面を触っている間、クライアントが「操作中」を知らせる間隔（秒） */

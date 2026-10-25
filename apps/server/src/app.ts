@@ -8,6 +8,7 @@ import type { NpcEngine } from './game/npc-engine';
 import { RoomManager } from './game/room-manager';
 import { authRoutes } from './routes/auth';
 import { matchRoutes } from './routes/matches';
+import { myScenarioRoutes } from './routes/my-scenarios';
 import { scenarioRoutes } from './routes/scenarios';
 import { wsRoutes } from './routes/ws';
 import { SESSION_COOKIE, getSessionUserId } from './session';
@@ -85,6 +86,7 @@ export function buildApp(opts: AppOptions) {
   app.get('/health', async () => ({ status: 'ok' }));
   app.register(authRoutes);
   app.register(scenarioRoutes);
+  app.register(myScenarioRoutes);
   app.register(matchRoutes);
   app.register(wsRoutes);
 
