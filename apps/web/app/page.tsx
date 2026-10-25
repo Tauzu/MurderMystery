@@ -39,8 +39,10 @@ export default function HomePage() {
 
       <div className="panel">
         <h2>ミステリーを投稿</h2>
-        <p className="muted">準備中です（今後のアップデートで追加されます）。</p>
-        <button disabled>投稿する</button>
+        <p>自分で作ったミステリーを公開できます。公開の前に、AIがチェックします。</p>
+        <Link href="/author">
+          <button>投稿する</button>
+        </Link>
       </div>
     </>
   );
