@@ -9,8 +9,10 @@ export const CONFIG = {
   RESULT_CLOSE_SEC: 1800,
   CHAT_MAX_CHARS: 200,
   CHAT_RATE_PER_SEC: 1,
-  IDLE_SWITCH_SEC: 180,
-  IDLE_WARN_SEC: 150,
+  IDLE_SWITCH_SEC: 300,
+  IDLE_WARN_SEC: 240,
+  /** 画面を触っている間、クライアントが「操作中」を知らせる間隔（秒） */
+  ACTIVITY_PING_SEC: 10,
   MATCH_WAIT_SEC: 90,
   /** 待機画面からの確認がこの秒数なければ、ブラウザを閉じたとみなして待機列から外す */
   MATCH_STALE_SEC: 15,

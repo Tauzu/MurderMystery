@@ -134,6 +134,13 @@ function applyEvent(
       return null;
     }
 
+    case 'Active': {
+      const seat = state.seats[event.seat];
+      if (!seat) return err('invalid_seat', '席が不正です');
+      touch(seat, ctx);
+      return null;
+    }
+
     case 'AgreeEndTalk': {
       if (state.phase !== 'TALK') return wrongPhase();
       const seat = state.seats[event.seat];

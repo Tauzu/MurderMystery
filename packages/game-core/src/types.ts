@@ -106,6 +106,8 @@ export type RoomEvent =
   | { type: 'PickTarget'; seat: number; target: number }
   | { type: 'Chat'; seat: number; body: string }
   | { type: 'AgreeEndTalk'; seat: number }
+  /** 画面操作（スクロール、マウス移動、入力など）があった。無操作の判定だけに使う */
+  | { type: 'Active'; seat: number }
   | { type: 'NpcTyping'; seat: number; typing: boolean }
   | { type: 'Vote'; seat: number; target: number }
   | { type: 'SwitchToNpc'; seat: number }

@@ -5,6 +5,7 @@ import { CARD_KIND_LABELS, type CardKind } from '@mm/shared';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import { formatClock, secondsLeft } from '../lib/time';
+import { useActivityPing } from '../lib/useActivityPing';
 import { useGameSocket, type GameSocket } from '../lib/useGameSocket';
 
 const PHASE_LABEL: Record<RoomView['phase'], string> = {
@@ -110,6 +111,7 @@ function RevealModal({
 
 export function GameRoom({ roomId }: { roomId: string }) {
   const socket = useGameSocket(roomId);
+  useActivityPing(socket);
   const { view, connection, closeReason } = socket;
   const switchNotices = useSwitchNotices(view);
   const [revealedSet, closeReveal] = useRevealNotice(view);
